@@ -908,7 +908,7 @@ export const canUserModifyInspection = (inspection: any, user: User | null | und
 export const canUserDeleteInspection = (inspection: any, user: User | null | undefined): boolean => {
   if (!user) return false;
   const st = String(inspection?.status || '').trim().toUpperCase();
-  if (st === 'LOCKED' || st === 'COMPLETED' || st === 'VERIFIED') return false;
+  if (st === 'LOCKED' || st === 'COMPLETED' || st === 'VERIFIED' || st === 'APPROVED') return false;
   if (String(user.role || '').toUpperCase() === 'ADMIN') return true;
   return hasPermission(user, [], 'INSPECTIONS', 'DELETE');
 };

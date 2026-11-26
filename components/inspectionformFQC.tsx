@@ -20,6 +20,13 @@ import { FQC_CHECKLIST_TEMPLATE } from '../constants';
 
 import { SignaturePad } from './SignaturePad';
 import { Combobox, FormAlertBanner, FormAlertState, extractFormErrorMessage } from '../src/components/qms';
+import {
+  sanitizeDecimalInput,
+  parseQty,
+  isQtySumEqual,
+  calcQtyRatePercent,
+  normalizePayloadQuantities,
+} from '../src/utils/quantityMath';
 
 const PRESET_ADDITIONAL_CRITERIA = [
   { category: 'Ngoại quan', label: 'Bề mặt sơn phẳng mịn, không bọt khí, bụi sơn' },
@@ -147,13 +154,11 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
   }, [formData.items, formData.inspectionStage]);
   
   const rates = useMemo(() => {
-    const ins = parseFloat(String(formData.inspectedQuantity || 0));
-    const pas = parseFloat(String(formData.passedQuantity || 0));
-    const fai = parseFloat(String(formData.failedQuantity || 0));
+    const ins = parseQty(formData.inspectedQuantity);
     if (ins <= 0) return { passRate: '0.0', defectRate: '0.0' };
-    return { 
-        passRate: ((pas / ins) * 100).toFixed(1), 
-        defectRate: ((fai / ins) * 100).toFixed(1) 
+    return {
+        passRate: calcQtyRatePercent(formData.passedQuantity, formData.inspectedQuantity, 1),
+        defectRate: calcQtyRatePercent(formData.failedQuantity, formData.inspectedQuantity, 1),
     };
   }, [formData.inspectedQuantity, formData.passedQuantity, formData.failedQuantity]);
 
@@ -202,7 +207,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
     if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
-        value = value.replace(/,/g, '.');
+        value = sanitizeDecimalInput(value);
     } 
     setFormData(prev => {
         const next = { ...prev, [field]: value };
@@ -239,7 +244,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   const handleSubmit = async () => {
     setFormAlert(null);
-    const ins = Number(formData.inspectedQuantity || 0);
+    const ins = parseQty(formData.inspectedQuantity);
     const foCode = formData.ma_nha_may || formData.headcode || searchCode || '';
 
     if (!formData.workshop || !formData.inspectionStage) {
@@ -251,9 +256,7 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
         return;
     }
 
-    const pas = Number(formData.passedQuantity || 0);
-    const fai = Number(formData.failedQuantity || 0);
-    if (pas + fai !== ins) {
+    if (!isQtySumEqual(formData.passedQuantity, formData.failedQuantity, ins)) {
         setFormAlert({ type: 'warning', title: 'Sai lệch số lượng', message: 'Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.' });
         return;
     }
@@ -263,17 +266,17 @@ export const InspectionFormFQC: React.FC<InspectionFormProps> = ({ initialData, 
     try {
         const effectiveMaCt = formData.ma_ct || foCode || '';
         const itemsToSave = (formData.items || []).filter((it: any) => it.stage === formData.inspectionStage || !it.stage);
-        const workingDraft: Inspection = {
+        const workingDraft: Inspection = normalizePayloadQuantities({
             ...JSON.parse(JSON.stringify(formData)),
             ma_ct: effectiveMaCt,
             ma_nha_may: formData.ma_nha_may || foCode,
             headcode: formData.headcode || foCode,
             stage: formData.stage || formData.inspectionStage || '',
             items: itemsToSave,
-            status: InspectionStatus.SUBMITTED,
+            status: InspectionStatus.PENDING,
             inspectorName: user.name,
             updatedAt: new Date().toISOString()
-        };
+        });
 
         const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
             setUploadProgress(pct);

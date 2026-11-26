@@ -550,7 +550,7 @@ export const IPODetail: React.FC<IPODetailProps> = ({ item, onBack, onViewInspec
                          ariaLabel="Trạng thái mẫu"
                          options={[
                            { value: 'DRAFT', label: 'DRAFT' },
-                           { value: 'SUBMITTED', label: 'SUBMITTED' },
+                           { value: 'PENDING', label: 'PENDING' },
                            { value: 'APPROVED', label: 'APPROVED' },
                            { value: 'REJECTED', label: 'REJECTED' }
                          ]}

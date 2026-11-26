@@ -805,10 +805,26 @@ app.get('/api/inspections', async (req, res) => {
   }
 });
 
-app.get('/api/export/inspections', async (req, res) => {
+app.get('/api/export/inspections', async (req: any, res) => {
+  const startedAt = Date.now();
   try {
-    const format = String(req.query.format || 'csv').toLowerCase();
-    const items = await dbService.getInspectionsExportRows(req.query, 10000);
+    if (
+      req.authUser &&
+      !dbMod.hasServerPermission(req.authUser, 'LIST', 'EXPORT') &&
+      !dbMod.hasServerPermission(req.authUser, 'INSPECTIONS', 'EXPORT')
+    ) {
+      return res.status(403).json({ error: 'Không có quyền xuất dữ liệu báo cáo kiểm tra (EXPORT).' });
+    }
+
+    const format = String(req.query.format || 'csv').toLowerCase() === 'xlsx' ? 'xlsx' : 'csv';
+    const requestedLimit = parseInt(String(req.query.limit || ''), 10);
+    const defaultLimit = format === 'csv' ? 50000 : 15000;
+    const exportLimit =
+      Number.isFinite(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, format === 'csv' ? 100000 : 50000)
+        : defaultLimit;
+
+    const items = await dbService.getInspectionsExportRows(req.query, exportLimit);
 
     const toExportNumeric = (val: any, zeroIfMissing: boolean): number | '' => {
       if (val !== undefined && val !== null && String(val).trim() !== '') {
@@ -841,50 +857,73 @@ app.get('/api/export/inspections', async (req, res) => {
       'ĐVT/Unit',
     ];
 
-    const rows = items.map((item: any) => {
+    const buildRowValues = (item: any): (string | number)[] => {
       const inspected = toExportNumeric(item.inspectedQuantity ?? item.inspected_qty, true) as number;
       const passed = toExportNumeric(item.passedQuantity ?? item.passed_qty, true) as number;
       const failed = toExportNumeric(item.failedQuantity ?? item.failed_qty, true) as number;
       const passRate = inspected > 0 ? ((passed / inspected) * 100).toFixed(1) + '%' : '';
       const failRate = inspected > 0 ? ((failed / inspected) * 100).toFixed(1) + '%' : '';
 
-      return {
-        'Mã hồ sơ': item.id || '',
-        'Loại phiếu': item.type || '',
-        'Mã dự án': item.ma_ct || item.projectCode || item.projectId || '',
-        'Tên dự án': item.ten_ct || item.projectName || '',
-        'Hạng mục/Mô tả': item.ten_hang_muc || item.description || item.title || '',
-        'Mã nhà máy': item.ma_nha_may || item.factoryOrder || item.poNumber || '',
-        'Headcode': item.headcode || '',
-        'QC kiểm tra': item.inspectorName || item.created_by || item.qcName || '',
-        'Xưởng': item.workshop || '',
-        'Công đoạn sản xuất': item.exportStage || item.stage || item.subStage || '',
-        'Ngày thực hiện': item.date || item.createdAt || '',
-        'Trạng thái': item.status || '',
-        'SL ĐĐH': toExportNumeric(item.so_luong_ipo ?? item.orderedQty, false),
-        'SLkiem': inspected,
-        'SLDat': passed,
-        'TLDat': passRate,
-        'SLLoi': failed,
-        'TLLoi': failRate,
-        'Kết luận/Ghi chú': item.exportSummary || item.summary || item.conclusion || item.notes || item.remarks || '',
-        'ĐVT/Unit': item.exportUnit || item.dvt || item.unit || item.uom || '',
-      };
-    });
+      return [
+        item.id || '',
+        item.type || '',
+        item.ma_ct || item.projectCode || item.projectId || '',
+        item.ten_ct || item.projectName || '',
+        item.ten_hang_muc || item.description || item.title || '',
+        item.ma_nha_may || item.factoryOrder || item.poNumber || '',
+        item.headcode || '',
+        item.inspectorName || item.created_by || item.qcName || '',
+        item.workshop || '',
+        item.exportStage || item.stage || item.subStage || '',
+        item.date || item.createdAt || '',
+        item.status || '',
+        toExportNumeric(item.so_luong_ipo ?? item.orderedQty, false),
+        inspected,
+        passed,
+        passRate,
+        failed,
+        failRate,
+        item.exportSummary || item.summary || item.conclusion || item.notes || item.remarks || '',
+        item.exportUnit || item.dvt || item.unit || item.uom || '',
+      ];
+    };
+
+    const durationMs = Date.now() - startedAt;
+    res.setHeader('X-Export-Row-Count', String(items.length));
+    res.setHeader('X-Export-Duration-Ms', String(durationMs));
 
     if (format === 'csv') {
-      let csv = '\uFEFF' + headers.join(',') + '\n';
-      for (const r of rows) {
-        csv += headers.map(h => `"${String((r as any)[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
-      }
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=AATN_Inspections_${Date.now()}.csv`);
-      return res.send(csv);
+
+      const escapeCsvCell = (val: string | number): string => {
+        if (typeof val === 'number') return `"${val}"`;
+        const s = String(val ?? '');
+        return s.includes('"') ? `"${s.replace(/"/g, '""')}"` : `"${s}"`;
+      };
+
+      res.write('\uFEFF' + headers.map(escapeCsvCell).join(',') + '\n');
+      const CHUNK_SIZE = 1000;
+      for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+        let chunk = '';
+        const end = Math.min(i + CHUNK_SIZE, items.length);
+        for (let j = i; j < end; j++) {
+          chunk += buildRowValues(items[j]).map(escapeCsvCell).join(',') + '\n';
+        }
+        res.write(chunk);
+      }
+      return res.end();
     } else {
+      const aoa: (string | number)[][] = new Array(items.length + 1);
+      aoa[0] = headers;
+      for (let i = 0; i < items.length; i++) {
+        aoa[i + 1] = buildRowValues(items[i]);
+      }
       const wb = xlsx.utils.book_new();
-      const ws = xlsx.utils.json_to_sheet(rows, { header: headers });
+      const ws = xlsx.utils.aoa_to_sheet(aoa);
       xlsx.utils.book_append_sheet(wb, ws, 'Inspections');
-      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx', compression: false });
+      res.setHeader('X-Export-Duration-Ms', String(Date.now() - startedAt));
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename=AATN_Inspections_${Date.now()}.xlsx`);
       return res.send(buf);
@@ -2644,8 +2683,13 @@ async function startServer() {
     });
     dbService.syncMissingInspectionsFromForms().then((res) => {
       console.log(`📋 Synced missing forms -> inspections: ${res.inserted} inserted, ${res.updated} po_number updated.`);
+      return dbService.backfillInspectionExportColumns(1000, 150);
+    }).then((bfRes) => {
+      if (bfRes && bfRes.updated > 0) {
+        console.log(`⚡ Backfilled M05 export cache columns on ${bfRes.updated} inspections rows.`);
+      }
     }).catch((err) => {
-      console.warn('Failed initial forms->inspections sync:', err);
+      console.warn('Failed initial forms->inspections sync/backfill:', err);
     });
     backfillTraceabilityIndex().then((count) => {
       console.log(`🔎 Backfilled inspection_traceability_index: ${count} index entries ensured.`);

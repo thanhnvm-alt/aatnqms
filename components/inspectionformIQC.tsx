@@ -12,6 +12,16 @@ import { fetchProjects, fetchDefectLibrary, saveDefectLibraryItem, fetchPlans, u
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
 import { PersistenceService } from '../services/persistenceService';
+import {
+  sanitizeDecimalInput,
+  parseQty,
+  subQty,
+  sumQty,
+  compareQty,
+  isQtySumEqual,
+  calcQtyRatePercent,
+  normalizePayloadQuantities,
+} from '../src/utils/quantityMath';
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -240,34 +250,46 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
   };
 
   const updateMaterial = (idx: number, field: string, value: any) => {
-    if (typeof value === 'string' && ['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
-        value = value.replace(/,/g, '.');
-    } 
+    const isNumField = ['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field);
+    if (typeof value === 'string' && isNumField) {
+        value = sanitizeDecimalInput(value);
+    }
     setFormData(prev => {
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
-        let val = value;
-        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) { val = value; }
-        let mat = { ...nextMaterials[idx], [field]: val };
-        const valNum = parseFloat(String(value || 0)) || 0;
+        const val = value;
+        const mat: any = { ...nextMaterials[idx], [field]: val };
         if (field === 'inspectQty') {
-            const deliveryQty = parseFloat(String(mat.deliveryQty || 0)) || 0;
-            const finalVal = valNum > deliveryQty ? deliveryQty : (valNum < 0 ? 0 : valNum);
-            mat.inspectQty = finalVal;
-            mat.passQty = finalVal;
-            mat.failQty = 0;
+            const deliveryQty = parseQty(mat.deliveryQty);
+            if (compareQty(val, deliveryQty) > 0) {
+                mat.inspectQty = deliveryQty;
+                mat.passQty = deliveryQty;
+                mat.failQty = 0;
+            } else {
+                mat.inspectQty = val;
+                mat.passQty = parseQty(val);
+                mat.failQty = 0;
+            }
         }
         else if (field === 'passQty') {
-            const inspectQty = parseFloat(String(mat.inspectQty || 0)) || 0;
-            const finalVal = valNum > inspectQty ? inspectQty : (valNum < 0 ? 0 : valNum);
-            mat.passQty = finalVal;
-            mat.failQty = Number((inspectQty - finalVal).toFixed(2));
+            const inspectQty = parseQty(mat.inspectQty);
+            if (compareQty(val, inspectQty) > 0) {
+                mat.passQty = inspectQty;
+                mat.failQty = 0;
+            } else {
+                mat.passQty = val;
+                mat.failQty = Math.max(0, subQty(inspectQty, val));
+            }
         }
         else if (field === 'failQty') {
-            const inspectQty = parseFloat(String(mat.inspectQty || 0)) || 0;
-            const finalVal = valNum > inspectQty ? inspectQty : (valNum < 0 ? 0 : valNum);
-            mat.failQty = finalVal;
-            mat.passQty = Number((inspectQty - finalVal).toFixed(2));
+            const inspectQty = parseQty(mat.inspectQty);
+            if (compareQty(val, inspectQty) > 0) {
+                mat.failQty = inspectQty;
+                mat.passQty = 0;
+            } else {
+                mat.failQty = val;
+                mat.passQty = Math.max(0, subQty(inspectQty, val));
+            }
         }
         if (field === 'category') {
             const iqcTpl = templates['IQC'] || [];
@@ -454,13 +476,13 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
         setFormAlert({ type: 'warning', title: 'Thiếu chữ ký', message: 'QC bắt buộc ký tên xác nhận báo cáo.' });
         return;
     }
-    const invalidMat = formData.materials?.find(m => m.inspectQty <= 0 || m.inspectQty > m.deliveryQty);
+    const invalidMat = formData.materials?.find(m => parseQty(m.inspectQty) <= 0 || compareQty(m.inspectQty, m.deliveryQty) > 0);
     if (invalidMat) {
         setFormAlert({ type: 'warning', title: 'Số lượng chưa hợp lệ', message: `Vật tư "${invalidMat.name || 'chưa đặt tên'}" có số lượng kiểm tra không hợp lệ (phải > 0 và <= SL Giao).` });
         return;
     }
 
-    const invalidQtySum = formData.materials?.find(m => (Number(m.passQty || 0) + Number(m.failQty || 0)) !== Number(m.inspectQty || 0));
+    const invalidQtySum = formData.materials?.find(m => !isQtySumEqual(m.passQty, m.failQty, m.inspectQty));
     if (invalidQtySum) {
         setFormAlert({ type: 'warning', title: 'Sai lệch số lượng', message: `Vật tư "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.` });
         return;
@@ -469,18 +491,18 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     setIsSaving(true);
     setUploadProgress(0);
     try {
-        const totalInspected = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
-        const totalPassed = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
-        const totalFailed = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
+        const totalInspected = sumQty((formData.materials || []).map((mat: any) => mat.inspectQty));
+        const totalPassed = sumQty((formData.materials || []).map((mat: any) => mat.passQty));
+        const totalFailed = sumQty((formData.materials || []).map((mat: any) => mat.failQty));
 
-        const workingDraft: Inspection = {
+        const workingDraft: Inspection = normalizePayloadQuantities({
             ...JSON.parse(JSON.stringify(formData)),
-            status: InspectionStatus.SUBMITTED,
+            status: InspectionStatus.PENDING,
             inspectedQuantity: totalInspected,
             passedQuantity: totalPassed,
             failedQuantity: totalFailed,
             updatedAt: new Date().toISOString()
-        };
+        });
 
         const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
             setUploadProgress(pct);
@@ -705,7 +727,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
             <div className="space-y-3">
                 {filteredMaterials.map((mat, matIdx) => {
                     const isExp = expandedMaterial === mat.id;
-                    const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
+                    const passRate = calcQtyRatePercent(mat.passQty, mat.inspectQty, 1);
                     const hasFail = mat.items?.some(it => it.status === CheckStatus.FAIL);
                     const hasCond = mat.items?.some(it => it.status === CheckStatus.CONDITIONAL);
                     const allPass = (mat.items?.length || 0) > 0 && mat.items?.every(it => it.status === CheckStatus.PASS);
@@ -839,7 +861,7 @@ export const InspectionFormIQC: React.FC<InspectionFormProps> = ({ initialData, 
     if (['e', 'E', '+', '-'].includes(e.key)) {
         e.preventDefault();
     }
-}} type="text" inputMode="decimal" value={mat.inspectQty ?? 0} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-2 py-1.5 border rounded-md font-bold text-center bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] tabular-nums ${mat.inspectQty > mat.deliveryQty || mat.inspectQty <= 0 ? 'border-red-500 text-red-600 dark:text-red-400' : 'border-blue-300 text-blue-700 dark:text-blue-300'}`}/></div>
+}} type="text" inputMode="decimal" value={mat.inspectQty ?? 0} onChange={e => updateMaterial(matIdx, 'inspectQty', e.target.value)} className={`w-full px-2 py-1.5 border rounded-md font-bold text-center bg-white dark:bg-slate-900 text-xs min-h-[44px] lg:min-h-[36px] tabular-nums ${compareQty(mat.inspectQty, mat.deliveryQty) > 0 || parseQty(mat.inspectQty) <= 0 ? 'border-red-500 text-red-600 dark:text-red-400' : 'border-blue-300 text-blue-700 dark:text-blue-300'}`}/></div>
                                     <div className="space-y-1"><label className="text-[9px] font-bold text-green-600 dark:text-green-500 uppercase block text-center">Đạt</label><input onKeyDown={(e) => { 
     
     // Also prevent invalid characters like 'e', '+', '-' if it's supposed to be positive numbers

@@ -26,6 +26,7 @@ interface InspectionFormProps {
 
 import { SignaturePad } from './SignaturePad';
 import { Combobox, FormAlertBanner, FormAlertState, extractFormErrorMessage } from '../src/components/qms';
+import { sanitizeDecimalInput, normalizePayloadQuantities } from '../src/utils/quantityMath';
 
 export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData, onSave, onCancel, user, templates }) => {
   const [formData, setFormData] = useState<Partial<Inspection>>({ 
@@ -164,7 +165,7 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
     if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
-        value = value.replace(/,/g, '.');
+        value = sanitizeDecimalInput(value);
     }  setFormData(prev => ({ ...prev, [field]: value })); };
 
   const handleItemChange = (index: number, field: keyof CheckItem, value: any) => {
@@ -249,15 +250,15 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
     setUploadProgress(0);
     try {
         let statusToSave = formData.status;
-        if (!statusToSave || statusToSave === InspectionStatus.DRAFT || statusToSave === InspectionStatus.PENDING || statusToSave === InspectionStatus.FLAGGED) {
-            statusToSave = InspectionStatus.SUBMITTED;
+        if (!statusToSave || statusToSave === InspectionStatus.DRAFT || statusToSave === InspectionStatus.PENDING || statusToSave === InspectionStatus.SUBMITTED || statusToSave === InspectionStatus.FLAGGED) {
+            statusToSave = InspectionStatus.PENDING;
         }
 
-        const workingDraft: Inspection = {
+        const workingDraft: Inspection = normalizePayloadQuantities({
             ...JSON.parse(JSON.stringify(formData)),
             status: statusToSave,
             updatedAt: new Date().toISOString()
-        };
+        });
 
         const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
             setUploadProgress(pct);
@@ -361,13 +362,13 @@ export const InspectionFormSITE: React.FC<InspectionFormProps> = ({ initialData,
                 <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Ngày kiểm tra</label><input type="date" value={formData.date} onChange={e => handleInputChange('date', e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-300 dark:border-slate-600 rounded-lg font-bold text-xs min-h-[44px] lg:min-h-[38px] focus:ring-1 ring-amber-200 outline-none tabular-nums"/></div>
                 <div className="space-y-1"><label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider ml-1">Trạng thái phiếu</label>
                   <Combobox
-                    value={formData.status || InspectionStatus.DRAFT}
+                    value={String(formData.status || '').toUpperCase() === 'SUBMITTED' ? InspectionStatus.PENDING : (formData.status || InspectionStatus.DRAFT)}
                     onChange={val => handleInputChange('status', val || InspectionStatus.DRAFT)}
                     allowClear={false}
                     ariaLabel="Trạng thái phiếu"
                     options={[
                       { value: InspectionStatus.DRAFT, label: 'Bản nháp (DRAFT)' },
-                      { value: InspectionStatus.SUBMITTED, label: 'Chờ duyệt (SUBMITTED)' }
+                      { value: InspectionStatus.PENDING, label: 'Chờ duyệt (PENDING)' }
                     ]}
                   />
                 </div>

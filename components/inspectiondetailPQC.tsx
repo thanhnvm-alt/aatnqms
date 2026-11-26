@@ -75,13 +75,13 @@ export const InspectionDetailPQC: React.FC<InspectionDetailProps> = ({ inspectio
 
   // --- ISO RBAC LOGIC (CRITICAL) ---
   const stUpper = String(inspection.status || '').toUpperCase();
-  const isApproved = ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(stUpper);
+  const isApproved = ['APPROVED', 'LOCKED', 'COMPLETED'].includes(stUpper);
   const isGuest = user.role === 'GUEST';
-  const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER';
+  const isManagerOrAdmin = user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'QA';
   const isOwner = inspection.inspectorName === user.name;
   
   const canModify = !isGuest && canUserModifyInspection(inspection, user);
-  const isLockedForUser = ['LOCKED', 'VERIFIED', 'COMPLETED'].includes(stUpper) || (isApproved && !isManagerOrAdmin && !isGuest);
+  const isLockedForUser = stUpper === 'LOCKED' || stUpper === 'COMPLETED' || (isApproved && !isManagerOrAdmin && !isGuest);
 
   const handleExportPDF = async () => {
       if (!pdfContainerRef.current) return;

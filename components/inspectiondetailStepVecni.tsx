@@ -25,7 +25,7 @@ import { Send, Camera, MessageSquare, Image as ImageIcon } from 'lucide-react';
 export const InspectionDetailStepVecni: React.FC<InspectionDetailProps> = ({ inspection, user, onBack, onEdit, onDelete, onApprove, onPostComment }) => {
   const isGuest = user.role === 'GUEST';
   const canModify = !isGuest && canUserModifyInspection(inspection, user);
-  const isApproved = ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
+  const isApproved = ['APPROVED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
 
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);

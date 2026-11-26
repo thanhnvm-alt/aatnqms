@@ -10,6 +10,7 @@ import {
   purgeTraceabilityIndex,
 } from './traceabilityIndexService.js';
 import { collectBookingAllPoTokens, splitPoTokens } from '../src/utils/poTokens.js';
+import { normalizePayloadQuantities, parseQty, isQtySumEqual } from '../src/utils/quantityMath.js';
 import { sendPasswordResetEmail } from './emailService.js';
 
 const SCHEMA = '"appQAQC"';
@@ -26,6 +27,87 @@ const safeJsonParse = <T>(raw: any, fallback: T): T => {
     return fallback;
   }
 };
+
+const firstNonEmptyStr = (...vals: any[]): string => {
+  for (const v of vals) {
+    if (v === null || v === undefined) continue;
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return '';
+};
+
+export function computeInspectionExportFields(
+  source: Record<string, any> = {},
+  materialsArg?: any[],
+  checkItemsArg?: any[]
+): { stageMain: string; subStage: string; exportStage: string; exportSummary: string; exportUnit: string } {
+  const materials = Array.isArray(materialsArg)
+    ? materialsArg
+    : Array.isArray(source.materials)
+    ? source.materials
+    : [];
+  const checkItems = Array.isArray(checkItemsArg)
+    ? checkItemsArg
+    : Array.isArray(source.items)
+    ? source.items
+    : [];
+
+  const stageMain = firstNonEmptyStr(source.stage, source.inspectionStage);
+  const subStage = firstNonEmptyStr(source.subStage, source.sub_stage);
+  const exportStage =
+    stageMain && subStage && !stageMain.toLowerCase().includes(subStage.toLowerCase())
+      ? `${stageMain} (${subStage})`
+      : stageMain || subStage || '';
+
+  let exportSummary = firstNonEmptyStr(
+    source.summary,
+    source.conclusion,
+    source.notes,
+    source.remarks,
+    source.comment_production,
+    source.productionComment,
+    source.pmComment
+  );
+
+  if (!exportSummary) {
+    const detailNotes: string[] = [];
+    const seenNotes = new Set<string>();
+    for (const m of materials) {
+      const note = firstNonEmptyStr(m?.notes, m?.note, m?.ncr?.issueDescription, m?.ncr?.description);
+      if (note && !seenNotes.has(note)) {
+        seenNotes.add(note);
+        detailNotes.push(note);
+        if (detailNotes.length >= 3) break;
+      }
+    }
+    if (detailNotes.length < 3) {
+      for (const ci of checkItems) {
+        const note = firstNonEmptyStr(ci?.notes, ci?.ncr?.issueDescription, ci?.ncr?.description);
+        if (note && !seenNotes.has(note)) {
+          seenNotes.add(note);
+          detailNotes.push(note);
+          if (detailNotes.length >= 3) break;
+        }
+      }
+    }
+    exportSummary = detailNotes.join('; ');
+  }
+
+  let exportUnit = firstNonEmptyStr(source.dvt, source.unit, source.uom);
+  if (!exportUnit && materials.length > 0) {
+    const units = Array.from(
+      new Set(
+        materials
+          .map((m: any) => firstNonEmptyStr(m?.unit, m?.dvt, m?.uom))
+          .filter(Boolean)
+      )
+    );
+    exportUnit = units.join(', ');
+  }
+
+  return { stageMain, subStage, exportStage, exportSummary, exportUnit };
+}
 
 // --- MODULE TAXONOMY (QMS v3.1.0 - M00 to M12) ---
 export interface QmsModuleInfo {
@@ -1801,30 +1883,30 @@ const ALL_FORM_TABLES = [
   'forms_site',
 ] as const;
 
-type CanonicalInspectionState = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'VERIFIED' | 'LOCKED';
+type CanonicalInspectionState = 'DRAFT' | 'PENDING' | 'VERIFIED' | 'APPROVED' | 'REJECTED' | 'LOCKED';
 
 export function normalizeInspectionStatus(raw: any): CanonicalInspectionState {
   const s = String(raw || 'DRAFT').trim().toUpperCase();
   if (s === 'DRAFT') return 'DRAFT';
-  if (s === 'SUBMITTED' || s === 'PENDING' || s === 'FLAGGED' || s === 'IN_PROGRESS') return 'SUBMITTED';
-  if (s === 'APPROVED') return 'APPROVED';
+  if (s === 'PENDING' || s === 'SUBMITTED' || s === 'FLAGGED' || s === 'IN_PROGRESS') return 'PENDING';
+  if (s === 'VERIFIED') return 'VERIFIED';
+  if (s === 'APPROVED' || s === 'COMPLETED') return 'APPROVED';
   if (s === 'REJECTED') return 'REJECTED';
-  if (s === 'VERIFIED' || s === 'COMPLETED') return 'VERIFIED';
   if (s === 'LOCKED') return 'LOCKED';
-  return 'SUBMITTED';
+  return 'PENDING';
 }
 
 const ALLOWED_INSPECTION_TRANSITIONS: Record<CanonicalInspectionState, CanonicalInspectionState[]> = {
-  DRAFT: ['DRAFT', 'SUBMITTED'],
-  SUBMITTED: ['SUBMITTED', 'DRAFT', 'APPROVED', 'REJECTED'],
-  APPROVED: ['APPROVED', 'VERIFIED', 'REJECTED'],
-  REJECTED: ['REJECTED', 'DRAFT', 'SUBMITTED'],
-  VERIFIED: ['VERIFIED', 'LOCKED'],
+  DRAFT: ['DRAFT', 'PENDING'],
+  PENDING: ['PENDING', 'DRAFT', 'VERIFIED', 'APPROVED', 'REJECTED'],
+  VERIFIED: ['VERIFIED', 'APPROVED', 'REJECTED'],
+  APPROVED: ['APPROVED', 'LOCKED', 'REJECTED'],
+  REJECTED: ['REJECTED', 'DRAFT', 'PENDING'],
   LOCKED: [],
 };
 
 export async function upsertInspectionRecord(rawPayload: any, actorId?: string | null, actorUser?: any) {
-  const payload = stripTransientMediaUrlParams(rawPayload);
+  const payload = normalizePayloadQuantities(stripTransientMediaUrlParams(rawPayload));
   const nowTs = Math.floor(Date.now() / 1000);
   const typeUpper = String(payload.type || 'PQC').toUpperCase();
   const id = payload.id || crypto.randomUUID();
@@ -1873,11 +1955,14 @@ export async function upsertInspectionRecord(rawPayload: any, actorId?: string |
 
   const requestedStatus = normalizeInspectionStatus(payload.status || (existingRow ? existingRow.status : 'DRAFT'));
 
-  if (existingRow) {
-    const rawCur = String(existingRow.status || '').trim().toUpperCase();
-    const curCanonical = normalizeInspectionStatus(rawCur);
+  const existingCanonical = existingRow
+    ? normalizeInspectionStatus(String(existingRow.status || '').trim().toUpperCase())
+    : null;
 
-    // 1. Absolute ISO Immutability: LOCKED (and legacy LOCKED) cannot be mutated at all — even by ADMIN or to LOCKED
+  if (existingRow) {
+    const curCanonical = existingCanonical!;
+
+    // 1. Absolute ISO Immutability: LOCKED cannot be mutated at all — even by ADMIN or to LOCKED
     if (curCanonical === 'LOCKED') {
       throw Object.assign(
         new Error('Phiếu kiểm tra đã ở trạng thái KHÓA (LOCKED - Immutable), tuyệt đối không thể chỉnh sửa theo quy trình ISO.'),
@@ -1926,14 +2011,19 @@ export async function upsertInspectionRecord(rawPayload: any, actorId?: string |
       const canSign2 = hasServerInspectionApprovalPermission(actorUser, typeUpper, 'SIGN2');
 
       if (curCanonical !== requestedStatus) {
-        if (requestedStatus === 'APPROVED' && !canSign1 && !canSign2) {
-          throw Object.assign(new Error('Không đủ thẩm quyền RBAC để phê duyệt phiếu (APPROVED).'), { statusCode: 403 });
+        if (requestedStatus === 'VERIFIED' && !canSign1 && !canSign2 && !isServerAdmin(actorUser)) {
+          throw Object.assign(new Error('Không đủ thẩm quyền RBAC (Cấp L1 / Tổ trưởng / QA / Admin) để xác nhận phiếu (VERIFIED).'), { statusCode: 403 });
         }
-        if ((requestedStatus === 'VERIFIED' || requestedStatus === 'LOCKED') && !canSign2 && !isServerAdmin(actorUser)) {
-          throw Object.assign(new Error(`Không đủ thẩm quyền RBAC (Cấp L2 / Manager / QA / Admin) để chuyển phiếu sang ${requestedStatus}.`), { statusCode: 403 });
+        if ((requestedStatus === 'APPROVED' || requestedStatus === 'LOCKED') && !canSign2 && !isServerAdmin(actorUser)) {
+          throw Object.assign(new Error(`Không đủ thẩm quyền RBAC (Cấp L2 / Trưởng phòng / QA / Admin) để chuyển phiếu sang ${requestedStatus}.`), { statusCode: 403 });
         }
-        if (requestedStatus === 'REJECTED' && !canSign1 && !canSign2 && !isServerAdmin(actorUser)) {
-          throw Object.assign(new Error('Không đủ thẩm quyền RBAC để từ chối phiếu (REJECTED).'), { statusCode: 403 });
+        if (requestedStatus === 'REJECTED') {
+          if (curCanonical === 'APPROVED' && !canSign2 && !isServerAdmin(actorUser)) {
+            throw Object.assign(new Error('Chỉ cấp L2 / Trưởng phòng / QA / Admin mới có quyền trả lại hồ sơ đã duyệt L2.'), { statusCode: 403 });
+          }
+          if (!canSign1 && !canSign2 && !isServerAdmin(actorUser)) {
+            throw Object.assign(new Error('Không đủ thẩm quyền RBAC để từ chối phiếu (REJECTED).'), { statusCode: 403 });
+          }
         }
       }
 
@@ -1950,11 +2040,18 @@ export async function upsertInspectionRecord(rawPayload: any, actorId?: string |
       }
     }
 
-    // 5. L2 Signature prerequisite before LOCKED (ISO Two-Tier Enforcement)
+    // 5. L2 Signature prerequisite before APPROVED (for 2-tier forms) and LOCKED (ISO Two-Tier Enforcement)
+    const isTwoTierForm = !['IQC', 'SITE'].includes(typeUpper);
+    const resolvedManagerSig = String(
+      payload.managerSignature || existingFormRow?.signature_manager || existingFormExtra?.managerSignature || ''
+    ).trim();
+    if (isTwoTierForm && requestedStatus === 'APPROVED' && curCanonical !== 'APPROVED' && !resolvedManagerSig) {
+      throw Object.assign(
+        new Error('Không thể chuyển phiếu kiểm tra 2 cấp sang APPROVED khi chưa có chữ ký phê duyệt cấp L2.'),
+        { statusCode: 400 }
+      );
+    }
     if (requestedStatus === 'LOCKED') {
-      const resolvedManagerSig = String(
-        payload.managerSignature || existingFormRow?.signature_manager || existingFormExtra?.managerSignature || ''
-      ).trim();
       if (!resolvedManagerSig) {
         throw Object.assign(
           new Error('Không thể khóa hồ sơ ISO (LOCKED) khi chưa có chữ ký phê duyệt cấp L2.'),
@@ -1963,12 +2060,44 @@ export async function upsertInspectionRecord(rawPayload: any, actorId?: string |
       }
     }
   } else {
-    // New inspection records may only start in DRAFT or SUBMITTED
-    if (requestedStatus !== 'DRAFT' && requestedStatus !== 'SUBMITTED') {
+    // New inspection records may only start in DRAFT or PENDING
+    if (requestedStatus !== 'DRAFT' && requestedStatus !== 'PENDING') {
       throw Object.assign(
-        new Error(`Vi phạm quy trình ISO State Machine: Phiếu tạo mới chỉ được phép ở trạng thái DRAFT hoặc SUBMITTED (nhận được ${requestedStatus}).`),
+        new Error(`Vi phạm quy trình ISO State Machine: Phiếu tạo mới chỉ được phép ở trạng thái DRAFT hoặc PENDING (nhận được ${requestedStatus}).`),
         { statusCode: 400 }
       );
+    }
+  }
+
+  // Exact 4-decimal quantity consistency guard for editable submissions
+  const isEditableSubmission =
+    requestedStatus !== 'DRAFT' &&
+    requestedStatus !== 'REJECTED' &&
+    typeUpper !== 'SITE' &&
+    (!existingRow || existingCanonical === 'DRAFT' || existingCanonical === 'PENDING' || existingCanonical === 'REJECTED');
+  if (isEditableSubmission) {
+    if (Array.isArray(payload.materials) && payload.materials.length > 0) {
+      for (const m of payload.materials) {
+        if (!m || typeof m !== 'object') continue;
+        const mIns = parseQty(m.inspectQty);
+        const mPas = parseQty(m.passQty);
+        const mFai = parseQty(m.failQty);
+        if ((mIns > 0 || mPas > 0 || mFai > 0) && !isQtySumEqual(mPas, mFai, mIns)) {
+          throw Object.assign(
+            new Error(`Sai lệch số lượng: Hạng mục "${m.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.`),
+            { statusCode: 400 }
+          );
+        }
+      }
+    }
+    if (payload.inspectedQuantity !== undefined && parseQty(payload.inspectedQuantity) > 0) {
+      const hasBreakdown = payload.passedQuantity !== undefined || payload.failedQuantity !== undefined;
+      if (hasBreakdown && !isQtySumEqual(payload.passedQuantity ?? 0, payload.failedQuantity ?? 0, payload.inspectedQuantity)) {
+        throw Object.assign(
+          new Error('Sai lệch số lượng: Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.'),
+          { statusCode: 400 }
+        );
+      }
     }
   }
 
@@ -2086,12 +2215,17 @@ export async function upsertInspectionRecord(rawPayload: any, actorId?: string |
     );
   }
 
-  // 2. Sync summary row in `inspections` index table (including `version` when column exists)
+  // 2. Sync summary row in `inspections` index table (including `version`, `export_summary`, `export_unit` when columns exist)
+  const hasExportCacheCols = inspCols.has('export_summary') && inspCols.has('export_unit');
+  const exportFields = hasExportCacheCols
+    ? computeInspectionExportFields(fullData, payload.materials || [], payload.items || [])
+    : null;
   const inspIdxCols = [
     'id', 'created_at', 'updated_at', 'created_by', 'ma_ct', 'ten_ct', 'ma_nha_may', 'ten_hang_muc',
     'workshop', 'status', 'type', 'score', 'headcode', 'stage', 'sub_stage',
     'inspected_qty', 'passed_qty', 'failed_qty', 'so_luong_ipo', 'priority', 'date', 'po_number',
     ...(hasInspVersion ? ['version'] : []),
+    ...(hasExportCacheCols ? ['export_summary', 'export_unit'] : []),
   ];
   const inspIdxVals: any[] = [
     id,
@@ -2117,6 +2251,7 @@ export async function upsertInspectionRecord(rawPayload: any, actorId?: string |
     dateTs,
     payload.po_number || payload.poNumber || null,
     ...(hasInspVersion ? [nextVersion] : []),
+    ...(hasExportCacheCols ? [exportFields?.exportSummary ?? '', exportFields?.exportUnit ?? ''] : []),
   ];
   const inspIdxPlaceholders = inspIdxVals.map((_, idx) => `$${idx + 1}`).join(', ');
   const inspIdxUpdates = inspIdxCols
@@ -2139,11 +2274,11 @@ export async function upsertInspectionRecord(rawPayload: any, actorId?: string |
     ? 'LOCK_INSPECTION'
     : statusUpper === 'APPROVED'
     ? 'APPROVE_INSPECTION'
-    : statusUpper === 'REJECTED'
-    ? 'REJECT_INSPECTION'
     : statusUpper === 'VERIFIED'
     ? 'VERIFY_INSPECTION'
-    : statusUpper === 'SUBMITTED'
+    : statusUpper === 'REJECTED'
+    ? 'REJECT_INSPECTION'
+    : statusUpper === 'PENDING' && existingCanonical !== 'PENDING'
     ? 'SUBMIT_INSPECTION'
     : 'UPDATE_INSPECTION';
 
@@ -2510,7 +2645,7 @@ export async function softDeleteInspectionRecord(id: string, actorId?: string | 
   const nowTs = Math.floor(Date.now() / 1000);
   const existing = await query(`SELECT status FROM ${SCHEMA}.inspections WHERE id = $1 LIMIT 1`, [id]);
   const existingUpper = String(existing.rows[0]?.status || '').toUpperCase();
-  if (existingUpper === 'LOCKED' || existingUpper === 'COMPLETED' || existingUpper === 'VERIFIED') {
+  if (existingUpper === 'LOCKED' || existingUpper === 'COMPLETED' || existingUpper === 'VERIFIED' || existingUpper === 'APPROVED') {
     throw Object.assign(new Error(`Phiếu kiểm tra đang ở trạng thái ${existingUpper}, không thể xóa theo quy tắc ISO.`), { statusCode: 403 });
   }
 

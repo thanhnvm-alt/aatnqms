@@ -238,7 +238,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
       ])),
       types: Object.keys(MODULE_CONFIG),
       projects: projectOptions.map(p => p.ma_ct),
-      statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.COMPLETED, InspectionStatus.APPROVED, InspectionStatus.FLAGGED],
+      statuses: [InspectionStatus.DRAFT, InspectionStatus.PENDING, InspectionStatus.VERIFIED, InspectionStatus.APPROVED, InspectionStatus.LOCKED, InspectionStatus.REJECTED, InspectionStatus.FLAGGED],
       stages: allStages
     };
   }, [user, users, workshops, projectOptions]);

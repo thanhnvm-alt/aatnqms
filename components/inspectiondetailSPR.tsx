@@ -49,7 +49,7 @@ export const InspectionDetailSPR: React.FC<InspectionDetailProps> = ({ inspectio
   const commentFileRef = useRef<HTMLInputElement>(null);
   const commentCameraRef = useRef<HTMLInputElement>(null);
 
-  const isApproved = ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
+  const isApproved = ['APPROVED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
 
   const handlePostComment = async () => {

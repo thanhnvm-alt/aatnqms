@@ -91,6 +91,7 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           quantities: 'Số lượng',
           pass: 'Đạt',
           fail: 'Không đạt',
+          note: 'Ghi chú',
         };
         
         if (keyMap[key]) {
@@ -105,6 +106,23 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
       }
     }
     return changes.length > 0 ? changes : null;
+  };
+
+  const resolveAuditActorName = (log: any): string => {
+    const serverName = String(log?.user_name || '').trim();
+    if (serverName) return serverName;
+    const uid = String(log?.user_id || '').trim();
+    if (!uid || uid.toLowerCase() === 'system') return 'Hệ thống';
+    const uidLower = uid.toLowerCase();
+    const matched = users.find(
+      (u) =>
+        String(u.id || '').trim().toLowerCase() === uidLower ||
+        String(u.username || '').trim().toLowerCase() === uidLower ||
+        String(u.msnv || '').trim().toLowerCase() === uidLower
+    );
+    if (matched?.name) return matched.name;
+    if (/^user_[a-z0-9_]+$/i.test(uid)) return 'Nhân sự hệ thống';
+    return uid;
   };
 
   const renderAuditTrail = () => {
@@ -150,37 +168,50 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                 {auditLogs.map((log) => {
                   const logDate = formatDateTime(log.timestamp);
                   const changes = getChangedFields(log.old_value, log.new_value);
-                  
+                  const actorFullName = resolveAuditActorName(log);
+
                   let actionLabel = log.action;
                   let actionColor = 'text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800';
-                  
+
                   if (log.action === 'CREATE_INSPECTION') {
                     actionLabel = 'Khởi tạo phiếu';
                     actionColor = 'text-blue-700 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400';
+                  } else if (log.action === 'SUBMIT_INSPECTION') {
+                    actionLabel = 'Gửi duyệt';
+                    actionColor = 'text-orange-700 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400';
                   } else if (log.action === 'UPDATE_INSPECTION') {
                     actionLabel = 'Chỉnh sửa';
                     actionColor = 'text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400';
-                  } else if (log.action === 'DELETE_INSPECTION') {
+                  } else if (log.action === 'DELETE_INSPECTION' || log.action === 'SOFT_DELETE_INSPECTION') {
                     actionLabel = 'Xóa phiếu';
                     actionColor = 'text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400';
+                  } else if (log.action === 'NORMALIZE_APPROVED_TO_VERIFIED') {
+                    actionLabel = 'Chuẩn hóa trạng thái L1 (VERIFIED)';
+                    actionColor = 'text-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 dark:text-cyan-400';
+                  } else if (log.action === 'VERIFY_INSPECTION') {
+                    actionLabel = 'Xác nhận L1 (VERIFIED)';
+                    actionColor = 'text-cyan-700 bg-cyan-50 dark:bg-cyan-900/20 dark:text-cyan-400';
+                  } else if (log.action === 'LOCK_INSPECTION') {
+                    actionLabel = 'Khóa hồ sơ ISO (LOCKED)';
+                    actionColor = 'text-slate-800 bg-slate-200 dark:bg-slate-800 dark:text-emerald-400';
                   } else if (log.action.includes('APPROVE') || log.action.includes('SIGN')) {
-                    actionLabel = 'Phê duyệt / Ký';
+                    actionLabel = 'Phê duyệt L2 (APPROVED)';
                     actionColor = 'text-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400';
                   } else if (log.action.includes('REJECT')) {
                     actionLabel = 'Từ chối / Trả lại';
                     actionColor = 'text-rose-700 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-400';
                   }
-                  
+
                   return (
                     <div key={log.id} className="relative group/item text-xs text-left">
                       <div className="absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-white dark:border-slate-900 group-hover/item:bg-blue-500 transition-colors" />
-                      
+
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${actionColor}`}>
                           {actionLabel}
                         </span>
-                        <span className="font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">
-                          {log.user_id || 'Hệ thống'}
+                        <span className="font-black text-slate-800 dark:text-slate-200 tracking-tight">
+                          {actorFullName}
                         </span>
                         <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
                           {logDate}
@@ -413,11 +444,11 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     return `${day}/${month}/${year} - ${hours}:${minutes}:${seconds}`;
   };
 
-  const currentStatusUpper = String(inspection.status || 'SUBMITTED').trim().toUpperCase();
+  const currentStatusUpper = String(inspection.status || 'PENDING').trim().toUpperCase();
   const is1Level = inspection.type === 'IQC' || inspection.type === 'SITE';
   const isLockedFinal = currentStatusUpper === 'LOCKED';
-  const isVerifiedState = currentStatusUpper === 'VERIFIED' || currentStatusUpper === 'COMPLETED';
-  const isApprovedState = currentStatusUpper === 'APPROVED';
+  const isVerifiedState = currentStatusUpper === 'VERIFIED';
+  const isApprovedState = currentStatusUpper === 'APPROVED' || currentStatusUpper === 'COMPLETED';
 
   const hasTeamLeadSig = Boolean(inspection.teamLeadSignature && String(inspection.teamLeadSignature).trim());
   const hasManagerSig = Boolean(inspection.managerSignature && String(inspection.managerSignature).trim());
@@ -456,19 +487,15 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
           teamLeadSignature: resolvedSig,
           teamLeadName: effectiveUser.name,
           teamLeadDate: nowISO,
-          status: InspectionStatus.APPROVED,
+          status: InspectionStatus.VERIFIED,
           updatedAt: nowISO,
         });
       } else if (showModal === 'SIGN2') {
-        const nextStatus =
-          isApprovedState || isVerifiedState
-            ? InspectionStatus.VERIFIED
-            : InspectionStatus.APPROVED;
         await onApprove(inspection.id, resolvedSig, {
           managerSignature: resolvedSig,
           managerName: effectiveUser.name,
           managerDate: nowISO,
-          status: nextStatus,
+          status: InspectionStatus.APPROVED,
           updatedAt: nowISO,
         });
       }
@@ -476,25 +503,6 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
       setSignature('');
     } catch (e) {
       setModalError('Lỗi khi ký duyệt: ' + (e instanceof Error ? e.message : 'Thất bại'));
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleVerifyStep = async () => {
-    setActionError('');
-    if (!hasManagerSig) {
-      setActionError('Cần hoàn tất ký phê duyệt L2 trước khi thẩm tra hồ sơ.');
-      return;
-    }
-    setIsProcessing(true);
-    try {
-      await onApprove(inspection.id, '', {
-        status: InspectionStatus.VERIFIED,
-        updatedAt: new Date().toISOString(),
-      });
-    } catch (e) {
-      setActionError('Lỗi khi thẩm tra phiếu: ' + (e instanceof Error ? e.message : 'Thất bại'));
     } finally {
       setIsProcessing(false);
     }
@@ -563,18 +571,20 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
     canSignL1 &&
     !hasTeamLeadSig &&
     !hasManagerSig &&
-    !isApprovedState &&
     !isVerifiedState &&
+    !isApprovedState &&
     !isLockedFinal;
   const showSign2Button =
     canSignL2 &&
     !hasManagerSig &&
+    !isLockedFinal;
+  const showLockButton = isApprovedState && hasManagerSig && (canSignL2 || isAdminUser);
+  const canRejectCurrent =
+    (canSignL1 || canSignL2) &&
     !isLockedFinal &&
-    (is1Level || isApprovedState || isVerifiedState || hasTeamLeadSig);
-  const showVerifyButton = isApprovedState && hasManagerSig && (canSignL2 || isAdminUser);
-  const showLockButton = isVerifiedState && hasManagerSig && (canSignL2 || isAdminUser);
-  const canRejectCurrent = (canSignL1 || canSignL2) && !isVerifiedState && !isLockedFinal && currentStatusUpper !== 'REJECTED';
-  const canClickReject = canSignL2 || isAuthorizedTeam;
+    currentStatusUpper !== 'REJECTED' &&
+    (!isApprovedState || canSignL2 || isAdminUser);
+  const canClickReject = isApprovedState ? (canSignL2 || isAdminUser) : (canSignL2 || isAuthorizedTeam);
 
   // ISO Immutability Lock (Frozen only at final LOCKED state)
   if (isLockedFinal) {
@@ -683,15 +693,6 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
         </h3>
         
         <div className="flex flex-wrap items-center gap-2">
-          {showVerifyButton && (
-            <button
-              onClick={handleVerifyStep}
-              disabled={isProcessing}
-              className="min-h-[44px] lg:min-h-[36px] px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm flex items-center gap-1.5 transition-colors"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" /> Thẩm tra đạt (VERIFIED)
-            </button>
-          )}
           {showLockButton && (
             <button
               onClick={handleLockFinal}
@@ -891,11 +892,11 @@ export const TwoTierApproval: React.FC<TwoTierApprovalProps> = ({ inspection, us
                     <ShieldCheck className="w-3.5 h-3.5" /> Ký phê duyệt L2
                   </button>
                 ) : isVerifiedState && !hasManagerSig ? (
-                  <span className="text-[10px] text-orange-500 font-bold tracking-wider uppercase block px-2">
-                    CẦN PHÊ DUYỆT L2 TRƯỚC KHI KHÓA
+                  <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-bold tracking-wider uppercase block px-2">
+                    ĐÃ DUYỆT L1 • CHỜ TRƯỞNG PHÒNG DUYỆT L2
                   </span>
                 ) : (
-                  <span className="text-[10px] text-slate-300 font-bold tracking-wider">CHỜ TRƯỞNG PHÒNG DUYỆT</span>
+                  <span className="text-[10px] text-slate-400 font-bold tracking-wider">CHỜ TRƯỞNG PHÒNG DUYỆT</span>
                 )}
               </div>
             )}

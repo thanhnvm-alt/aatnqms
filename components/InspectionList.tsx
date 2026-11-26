@@ -226,8 +226,26 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<'csv' | 'xlsx' | null>(null);
+  const [exportElapsedMs, setExportElapsedMs] = useState(0);
+  const [exportFeedback, setExportFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+
+  useEffect(() => {
+    if (!exportingFormat) return;
+    const start = Date.now();
+    setExportElapsedMs(0);
+    const timer = window.setInterval(() => {
+      setExportElapsedMs(Date.now() - start);
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [exportingFormat]);
+
+  useEffect(() => {
+    if (!exportFeedback || exportFeedback.type !== 'success') return;
+    const t = window.setTimeout(() => setExportFeedback(null), 6000);
+    return () => window.clearTimeout(t);
+  }, [exportFeedback]);
   const [lazyLoadedItems, setLazyLoadedItems] = useState<Inspection[]>([]);
   const [itemsTotalDesktop, setItemsTotalDesktop] = useState<number>(0);
   const [itemsError, setItemsError] = useState<string | null>(null);
@@ -378,12 +396,11 @@ export const InspectionList: React.FC<InspectionListProps> = ({
           types: Object.keys(MODULE_CONFIG),
           statuses: [
             InspectionStatus.DRAFT,
-            InspectionStatus.SUBMITTED,
-            InspectionStatus.APPROVED,
+            InspectionStatus.PENDING,
             InspectionStatus.VERIFIED,
+            InspectionStatus.APPROVED,
             InspectionStatus.LOCKED,
             InspectionStatus.REJECTED,
-            InspectionStatus.PENDING,
             InspectionStatus.FLAGGED,
           ],
           stages: allStages
@@ -393,7 +410,10 @@ export const InspectionList: React.FC<InspectionListProps> = ({
   const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterProject.length > 0 || filterStage.length > 0 || filterStatus.length > 0 || filterType.length > 0 || startDate !== '' || endDate !== '';
 
   const handleExport = async (format: 'csv' | 'xlsx' = 'csv') => {
-    setIsExporting(true);
+    if (exportingFormat) return;
+    setExportFeedback(null);
+    setExportingFormat(format);
+    const startedAt = Date.now();
     try {
       const filters = {
         qc: filterQC.join(','),
@@ -406,12 +426,24 @@ export const InspectionList: React.FC<InspectionListProps> = ({
         startDate,
         endDate
       };
-      await exportInspections(filters, format);
-    } catch (error) {
+      const result = await exportInspections(filters, format);
+      const totalSec = ((Date.now() - startedAt) / 1000).toFixed(1);
+      const countText =
+        typeof result?.rowCount === 'number' && !isNaN(result.rowCount)
+          ? `${result.rowCount.toLocaleString('vi-VN')} phiếu `
+          : '';
+      setExportFeedback({
+        type: 'success',
+        message: `Đã xuất xong ${countText}(${format.toUpperCase()}) trong ${totalSec}s.`,
+      });
+    } catch (error: any) {
       console.error('Export failed:', error);
-      alert('Lỗi khi xuất file báo cáo');
+      setExportFeedback({
+        type: 'error',
+        message: error?.message || 'Lỗi khi xuất file báo cáo kiểm tra.',
+      });
     } finally {
-      setIsExporting(false);
+      setExportingFormat(null);
     }
   };
 
@@ -788,26 +820,81 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                   <div className="flex items-center gap-1.5">
                     <button 
                       onClick={() => handleExport('csv')}
-                      disabled={isExporting}
-                      title="Xuất CSV Stream (Tốc độ cao, hỗ trợ dữ liệu siêu lớn)"
+                      disabled={exportingFormat !== null}
+                      title="Xuất CSV Stream (Tốc độ cao, hỗ trợ dữ liệu lớn)"
                       className="min-h-[44px] lg:min-h-[40px] px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
                     >
-                      {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                      <span className="hidden sm:inline">Xuất CSV Stream</span>
-                      <span className="sm:hidden">CSV</span>
+                      {exportingFormat === 'csv' ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <Download className="w-4 h-4 shrink-0" />}
+                      <span className="hidden sm:inline tabular-nums">
+                        {exportingFormat === 'csv' ? `Đang xuất CSV (${(exportElapsedMs / 1000).toFixed(1)}s)` : 'Xuất CSV Stream'}
+                      </span>
+                      <span className="sm:hidden tabular-nums">
+                        {exportingFormat === 'csv' ? `${(exportElapsedMs / 1000).toFixed(1)}s` : 'CSV'}
+                      </span>
                     </button>
                     <button 
                       onClick={() => handleExport('xlsx')}
-                      disabled={isExporting}
-                      title="Xuất Excel (.xlsx)"
-                      className="min-w-[44px] min-h-[44px] lg:min-w-[40px] lg:min-h-[40px] p-2 bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center"
+                      disabled={exportingFormat !== null}
+                      title="Xuất Excel (.xlsx) tốc độ cao"
+                      className="min-h-[44px] lg:min-h-[40px] px-3 py-2 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
                     >
-                      {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                      {exportingFormat === 'xlsx' ? <Loader2 className="w-4 h-4 animate-spin text-blue-600 shrink-0" /> : <Download className="w-4 h-4 text-slate-500 shrink-0" />}
+                      <span className="hidden sm:inline tabular-nums">
+                        {exportingFormat === 'xlsx' ? `Đang xuất Excel (${(exportElapsedMs / 1000).toFixed(1)}s)` : 'Excel (.xlsx)'}
+                      </span>
+                      <span className="sm:hidden tabular-nums">
+                        {exportingFormat === 'xlsx' ? `${(exportElapsedMs / 1000).toFixed(1)}s` : 'XLSX'}
+                      </span>
                     </button>
                   </div>
                 )}
               </div>
           </div>
+
+          {(exportingFormat !== null || exportFeedback !== null) && (
+            <div className="max-w-7xl mx-auto mt-2">
+              {exportingFormat !== null ? (
+                <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-xs font-semibold">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span className="truncate">
+                      {exportingFormat === 'csv'
+                        ? 'Đang tổng hợp và xuất luồng CSV Stream...'
+                        : 'Đang tổng hợp dữ liệu và đóng gói Excel (.xlsx)...'}
+                    </span>
+                  </div>
+                  <span className="font-mono tabular-nums text-xs font-bold shrink-0">
+                    {(exportElapsedMs / 1000).toFixed(1)}s
+                  </span>
+                </div>
+              ) : exportFeedback ? (
+                <div
+                  className={`flex items-center justify-between gap-3 px-3 py-2 rounded-xl border text-xs font-semibold ${
+                    exportFeedback.type === 'success'
+                      ? 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+                      : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {exportFeedback.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-red-600 dark:text-red-400" />
+                    )}
+                    <span className="truncate">{exportFeedback.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExportFeedback(null)}
+                    aria-label="Đóng thông báo xuất báo cáo"
+                    className="min-w-[32px] min-h-[32px] flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 shrink-0"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
       </div>
 
       {/* CONTENT AREA */}
@@ -1043,7 +1130,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                             </span>
                                                         )}
                                                         <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider ${
-                                                            ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(item.status || '').toUpperCase()) ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
+                                                            ['APPROVED', 'LOCKED', 'COMPLETED'].includes(String(item.status || '').toUpperCase()) ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
+                                                            String(item.status || '').toUpperCase() === 'VERIFIED' ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300' :
                                                             ['FLAGGED', 'REJECTED'].includes(String(item.status || '').toUpperCase()) ? 'bg-red-100 text-red-700' :
                                                             ['SUBMITTED', 'PENDING'].includes(String(item.status || '').toUpperCase()) ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700' :
                                                             'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -1368,7 +1456,8 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                             </div>
                                             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                                                 <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                                                    ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(item.status || '').toUpperCase()) ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
+                                                    ['APPROVED', 'LOCKED', 'COMPLETED'].includes(String(item.status || '').toUpperCase()) ? 'bg-green-100 dark:bg-green-900/30 text-green-700' :
+                                                    String(item.status || '').toUpperCase() === 'VERIFIED' ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300' :
                                                     ['FLAGGED', 'REJECTED'].includes(String(item.status || '').toUpperCase()) ? 'bg-red-100 text-red-700' :
                                                     ['SUBMITTED', 'PENDING'].includes(String(item.status || '').toUpperCase()) ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700' :
                                                     'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
@@ -1432,7 +1521,7 @@ export const InspectionList: React.FC<InspectionListProps> = ({
                                                 : (selectedItemDesktop.ten_hang_muc || 'CHƯA CÓ TIÊU ĐỀ')}
                                 </h2>
                                 <div className="mt-3 flex items-center gap-2 flex-wrap">
-                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(selectedItemDesktop.status || '').toUpperCase()) ? 'bg-green-100 dark:bg-green-900/30 text-green-700' : ['FLAGGED', 'REJECTED'].includes(String(selectedItemDesktop.status || '').toUpperCase()) ? 'bg-red-100 text-red-700' : ['SUBMITTED', 'PENDING'].includes(String(selectedItemDesktop.status || '').toUpperCase()) ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>{selectedItemDesktop.status}</span>
+                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${['APPROVED', 'LOCKED', 'COMPLETED'].includes(String(selectedItemDesktop.status || '').toUpperCase()) ? 'bg-green-100 dark:bg-green-900/30 text-green-700' : String(selectedItemDesktop.status || '').toUpperCase() === 'VERIFIED' ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300' : ['FLAGGED', 'REJECTED'].includes(String(selectedItemDesktop.status || '').toUpperCase()) ? 'bg-red-100 text-red-700' : ['SUBMITTED', 'PENDING'].includes(String(selectedItemDesktop.status || '').toUpperCase()) ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 dark:text-slate-500'}`}>{selectedItemDesktop.status}</span>
                                     <span className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase ${MODULE_CONFIG[selectedItemDesktop.type || 'PQC']?.bg} ${MODULE_CONFIG[selectedItemDesktop.type || 'PQC']?.color}`}>{selectedItemDesktop.type}</span>
                                     {(selectedItemDesktop.po_number || selectedItemDesktop.poNumber || selectedItemDesktop.pr_number || selectedItemDesktop.prNumber) && (
                                         <span className="px-2.5 py-1 rounded-md text-xs font-mono font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/40 border border-blue-200 dark:border-blue-800">

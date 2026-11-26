@@ -20,6 +20,16 @@ import { PersistenceService } from '../services/persistenceService';
 
 import { SignaturePad } from './SignaturePad';
 import { Combobox, FormAlertBanner, FormAlertState, extractFormErrorMessage } from '../src/components/qms';
+import {
+  sanitizeDecimalInput,
+  parseQty,
+  subQty,
+  compareQty,
+  isQtySumEqual,
+  isQtySumOver,
+  calcQtyRatePercent,
+  normalizePayloadQuantities,
+} from '../src/utils/quantityMath';
 
 const NCRModal = ({ isOpen, onClose, onSave, initialData, itemName, inspectionStage }: { isOpen: boolean; onClose: () => void; onSave: (ncr: NCR) => void; initialData?: NCR; itemName: string; inspectionStage?: string; }) => {
     const [ncrData, setNcrData] = useState<Partial<NCR>>({ severity: 'MINOR', issueDescription: '', rootCause: '', solution: '', responsiblePerson: '', imagesBefore: [], imagesAfter: [], status: 'OPEN' });
@@ -432,15 +442,11 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
   }, [formData.items, formData.inspectionStage]);
   
   const rates = useMemo(() => {
-    const ins = parseFloat(String(formData.inspectedQuantity || 0));
-    const pas = parseFloat(String(formData.passedQuantity || 0));
-    const fai = parseFloat(String(formData.failedQuantity || 0));
+    const ins = parseQty(formData.inspectedQuantity);
     if (ins <= 0) return { passRate: '0.0', defectRate: '0.0' };
-    
-    // ISO-LOGIC FIXED: Fixed calculation syntax and logic to avoid SyntaxError
-    return { 
-        passRate: ((pas / ins) * 100).toFixed(1), 
-        defectRate: ((fai / ins) * 100).toFixed(1) 
+    return {
+      passRate: calcQtyRatePercent(formData.passedQuantity, formData.inspectedQuantity, 1),
+      defectRate: calcQtyRatePercent(formData.failedQuantity, formData.inspectedQuantity, 1),
     };
   }, [formData.inspectedQuantity, formData.passedQuantity, formData.failedQuantity]);
 
@@ -537,59 +543,49 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
       setFormData(prev => {
           const next = { ...prev };
           
-          // ISO VALIDATION & AUTO-CALCULATION LOGIC
-          if (field === 'inspectedQuantity') {
-              let val = value;
-              let parsedVal = parseFloat(String(val));
-              if (isNaN(parsedVal)) parsedVal = 0;
-              const ipo = parseFloat(String(next.so_luong_ipo || 0));
-              
-              if (ipo > 0 && parsedVal > ipo) {
+          // ISO VALIDATION & AUTO-CALCULATION LOGIC (exact 4-decimal math)
+          if (field === 'so_luong_ipo') {
+              next.so_luong_ipo = sanitizeDecimalInput(value) as any;
+          }
+          else if (field === 'inspectedQuantity') {
+              const sanitized = sanitizeDecimalInput(value);
+              const parsedVal = parseQty(sanitized);
+              const ipo = parseQty(next.so_luong_ipo);
+
+              if (ipo > 0 && compareQty(parsedVal, ipo) > 0) {
                   next.inspectedQuantity = ipo;
                   next.passedQuantity = ipo;
                   next.failedQuantity = 0;
-              } else if (parsedVal < 0) {
-                  next.inspectedQuantity = 0;
-                  next.passedQuantity = 0;
-                  next.failedQuantity = 0;
               } else {
-                  next.inspectedQuantity = val;
-                  next.passedQuantity = val;
+                  next.inspectedQuantity = sanitized as any;
+                  next.passedQuantity = sanitized as any;
                   next.failedQuantity = 0;
               }
           }
           else if (field === 'passedQuantity') {
-              let val = value;
-              let parsedVal = parseFloat(String(val));
-              if (isNaN(parsedVal)) parsedVal = 0;
-              const ins = parseFloat(String(next.inspectedQuantity || 0));
-              
-              if (parsedVal > ins) {
+              const sanitized = sanitizeDecimalInput(value);
+              const parsedVal = parseQty(sanitized);
+              const ins = parseQty(next.inspectedQuantity);
+
+              if (compareQty(parsedVal, ins) > 0) {
                   next.passedQuantity = ins;
                   next.failedQuantity = 0;
-              } else if (parsedVal < 0) {
-                  next.passedQuantity = 0;
-                  next.failedQuantity = ins;
               } else {
-                  next.passedQuantity = val;
-                  next.failedQuantity = Number((ins - parsedVal).toFixed(2));
+                  next.passedQuantity = sanitized as any;
+                  next.failedQuantity = Math.max(0, subQty(ins, parsedVal));
               }
           }
           else if (field === 'failedQuantity') {
-              let val = value;
-              let parsedVal = parseFloat(String(val));
-              if (isNaN(parsedVal)) parsedVal = 0;
-              const ins = parseFloat(String(next.inspectedQuantity || 0));
-              
-              if (parsedVal > ins) {
+              const sanitized = sanitizeDecimalInput(value);
+              const parsedVal = parseQty(sanitized);
+              const ins = parseQty(next.inspectedQuantity);
+
+              if (compareQty(parsedVal, ins) > 0) {
                   next.failedQuantity = ins;
                   next.passedQuantity = 0;
-              } else if (parsedVal < 0) {
-                  next.failedQuantity = 0;
-                  next.passedQuantity = ins;
               } else {
-                  next.failedQuantity = val;
-                  next.passedQuantity = Number((ins - parsedVal).toFixed(2));
+                  next.failedQuantity = sanitized as any;
+                  next.passedQuantity = Math.max(0, subQty(ins, parsedVal));
               }
           }
           else {
@@ -620,8 +616,8 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
 
   const handleSubmit = async () => {
     setFormAlert(null);
-    const ins = Number(formData.inspectedQuantity || 0);
-    const ipo = Number(formData.so_luong_ipo || 0);
+    const ins = parseQty(formData.inspectedQuantity);
+    const ipo = parseQty(formData.so_luong_ipo);
 
     if (!formData.workshop || !formData.inspectionStage) {
         setFormAlert({ type: 'warning', title: 'Thiếu thông tin', message: 'Vui lòng chọn Xưởng sản xuất và Công đoạn kiểm tra.' });
@@ -632,14 +628,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
         setFormAlert({ type: 'warning', title: 'Số lượng chưa hợp lệ', message: 'Số lượng kiểm tra phải lớn hơn 0.' });
         return;
     }
-    if (ipo > 0 && ins > ipo) {
+    if (ipo > 0 && compareQty(ins, ipo) > 0) {
         setFormAlert({ type: 'warning', title: 'Vượt số lượng IPO', message: 'Số lượng kiểm tra không được vượt quá số lượng IPO.' });
         return;
     }
 
-    const pas = Number(formData.passedQuantity || 0);
-    const fai = Number(formData.failedQuantity || 0);
-    if (pas + fai !== ins) {
+    if (!isQtySumEqual(formData.passedQuantity, formData.failedQuantity, ins)) {
         setFormAlert({ type: 'warning', title: 'Sai lệch số lượng', message: 'Tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.' });
         return;
     }
@@ -649,17 +643,17 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
     try {
         const foCode = formData.ma_nha_may || formData.headcode || searchCode || '';
         const itemsToSave = (formData.items || []).filter((it: any) => it.stage === formData.inspectionStage || !it.stage);
-        const workingDraft: Inspection = {
+        const workingDraft: Inspection = normalizePayloadQuantities({
             ...JSON.parse(JSON.stringify(formData)),
             ma_ct: formData.ma_ct || foCode,
             ma_nha_may: formData.ma_nha_may || foCode,
             headcode: formData.headcode || foCode,
             stage: formData.stage || formData.inspectionStage || '',
             items: itemsToSave,
-            status: InspectionStatus.SUBMITTED,
+            status: InspectionStatus.PENDING,
             inspectorName: user.name,
             updatedAt: new Date().toISOString()
-        };
+        });
 
         const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
             setUploadProgress(pct);
@@ -941,12 +935,12 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                             type="text" inputMode="decimal" 
                             value={formData.inspectedQuantity ?? ''} 
                             onChange={e => handleInputChange('inspectedQuantity', e.target.value)} 
-                            className={`w-full min-h-[44px] lg:min-h-[38px] px-2 py-2 border rounded-md font-bold text-xs text-center shadow-sm tabular-nums ${parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`} 
+                            className={`w-full min-h-[44px] lg:min-h-[38px] px-2 py-2 border rounded-md font-bold text-xs text-center shadow-sm tabular-nums ${parseQty(formData.so_luong_ipo) > 0 && compareQty(formData.inspectedQuantity, formData.so_luong_ipo) > 0 ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`} 
                         />
-                        {parseFloat(String(formData.inspectedQuantity)) > parseFloat(String(formData.so_luong_ipo)) && (
+                        {parseQty(formData.so_luong_ipo) > 0 && compareQty(formData.inspectedQuantity, formData.so_luong_ipo) > 0 && (
                             <p className="text-[8px] text-red-500 dark:text-red-400 font-bold uppercase text-center mt-0.5">Vượt SL IPO</p>
                         )}
-                        {parseFloat(String(formData.inspectedQuantity)) <= 0 && (
+                        {parseQty(formData.inspectedQuantity) <= 0 && (
                             <p className="text-[8px] text-orange-500 font-bold uppercase text-center mt-0.5 whitespace-nowrap overflow-hidden">Phải &gt; 0</p>
                         )}
                     </div>
@@ -987,7 +981,7 @@ export const InspectionFormPQC: React.FC<InspectionFormProps> = ({ initialData, 
                         />
                     </div>
                 </div>
-                {((Number(formData.passedQuantity) || 0) + (Number(formData.failedQuantity) || 0)) > (Number(formData.inspectedQuantity) || 0) && (
+                {isQtySumOver(formData.passedQuantity, formData.failedQuantity, formData.inspectedQuantity) && (
                     <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-900/20 p-1.5 rounded-lg border border-red-100">
                         <AlertTriangle className="w-3 h-3 text-red-600 dark:text-red-400 shrink-0" />
                         <p className="text-[8px] text-red-700 font-bold uppercase leading-none">Lỗi: (Đạt + Lỗi) &gt; Số lượng kiểm tra</p>

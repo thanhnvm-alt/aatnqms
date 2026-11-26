@@ -58,7 +58,7 @@ export const InspectionDetailFRS: React.FC<InspectionDetailProps> = ({ inspectio
   const isAdmin = user.role === 'ADMIN';
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const isGuest = user.role === 'GUEST';
-  const isApproved = ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
+  const isApproved = ['APPROVED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
   const isOwner = inspection.inspectorName === user.name;
   const canModify = !isGuest && canUserModifyInspection(inspection, user);
   const items = inspection.items || [];

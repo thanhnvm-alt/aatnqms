@@ -1,7 +1,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { query } from "../lib/db.js";
+import { query, getPool } from "../lib/db.js";
 
 export async function runMigrations() {
   const schema = process.env.DB_SCHEMA || 'appQAQC';
@@ -416,8 +416,10 @@ export async function runMigrations() {
     await addColumn('inspections', 'priority', 'TEXT');
     await addColumn('inspections', 'date', 'BIGINT');
     await addColumn('inspections', 'sub_stage', 'TEXT');
+    await addColumn('inspections', 'export_summary', 'TEXT');
+    await addColumn('inspections', 'export_unit', 'TEXT');
 
-    // Create highly optimized indices for inspections table to speed up dashboard reporting
+    // Create highly optimized indices for inspections table to speed up dashboard reporting & fast M05 export
     try {
       await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_status" ON "${schema}"."inspections" ("status");`);
       await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_type" ON "${schema}"."inspections" ("type");`);
@@ -426,7 +428,28 @@ export async function runMigrations() {
       await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_created_at" ON "${schema}"."inspections" ("created_at");`);
       await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_created_by" ON "${schema}"."inspections" ("created_by");`);
       await query(`CREATE INDEX IF NOT EXISTS "idx_inspections_priority" ON "${schema}"."inspections" ("priority");`);
-      migrationLogs.push(`✅ Created performance indices for table inspections in ${schema}`);
+      await query(`
+        CREATE INDEX IF NOT EXISTS "idx_inspections_effective_ts"
+        ON "${schema}"."inspections" ((COALESCE(NULLIF("date", 0), "created_at")) DESC NULLS LAST, "created_at" DESC NULLS LAST)
+        WHERE COALESCE(UPPER("status"), '') <> 'DELETED';
+      `);
+      await query(`
+        CREATE OR REPLACE FUNCTION "${schema}".try_parse_jsonb(txt TEXT)
+        RETURNS JSONB
+        LANGUAGE plpgsql
+        IMMUTABLE
+        AS $$
+        BEGIN
+          IF txt IS NULL OR BTRIM(txt) = '' THEN
+            RETURN NULL;
+          END IF;
+          RETURN txt::jsonb;
+        EXCEPTION WHEN OTHERS THEN
+          RETURN NULL;
+        END;
+        $$;
+      `);
+      migrationLogs.push(`✅ Created performance indices & export helpers for table inspections in ${schema}`);
     } catch (e: any) {
       console.warn(`⚠️ Could not create index on inspections:`, e.message);
       migrationLogs.push(`⚠️ Could not create index on inspections: ${e.message}`);
@@ -1126,6 +1149,157 @@ export async function runMigrations() {
     } catch (sdErr: any) {
       console.warn(`⚠️ Could not setup storage_drive_map:`, sdErr?.message);
       migrationLogs.push(`⚠️ storage_drive_map setup warning: ${sdErr?.message}`);
+    }
+
+    // --- NORMALIZE LEGACY SUBMITTED -> PENDING (M05) ---
+    try {
+      const ALL_M05_FORM_TABLES = [
+        ...FORM_TABLES,
+        'forms_pqc',
+      ];
+      let convertedTotal = 0;
+
+      const idxConvert = await query(
+        `UPDATE "${schema}"."inspections"
+         SET status = 'PENDING',
+             updated_at = (EXTRACT(EPOCH FROM NOW())::BIGINT)
+         WHERE UPPER(BTRIM(COALESCE(status, ''))) = 'SUBMITTED'`
+      );
+      convertedTotal += idxConvert.rowCount || 0;
+
+      for (const tbl of ALL_M05_FORM_TABLES) {
+        try {
+          await query(
+            `UPDATE "${schema}"."${tbl}"
+             SET status = 'PENDING',
+                 data = CASE
+                   WHEN "${schema}".try_parse_jsonb("data") IS NOT NULL
+                        AND UPPER(BTRIM(COALESCE("${schema}".try_parse_jsonb("data")->>'status', ''))) = 'SUBMITTED'
+                     THEN ("${schema}".try_parse_jsonb("data") || '{"status":"PENDING"}'::jsonb)::text
+                   ELSE "data"
+                 END
+             WHERE UPPER(BTRIM(COALESCE(status, ''))) = 'SUBMITTED'
+                OR (
+                  "${schema}".try_parse_jsonb("data") IS NOT NULL
+                  AND UPPER(BTRIM(COALESCE("${schema}".try_parse_jsonb("data")->>'status', ''))) = 'SUBMITTED'
+                )`
+          );
+        } catch (tblErr: any) {
+          console.warn(`⚠️ SUBMITTED->PENDING skip on ${tbl}:`, tblErr?.message);
+        }
+      }
+
+      await query(
+        `UPDATE "${schema}"."inspection_traceability_index"
+         SET status = 'PENDING',
+             updated_at = (EXTRACT(EPOCH FROM NOW())::BIGINT)
+         WHERE UPPER(BTRIM(COALESCE(status, ''))) = 'SUBMITTED'`
+      ).catch(() => {});
+
+      if (convertedTotal > 0) {
+        migrationLogs.push(`🔄 Converted ${convertedTotal} SUBMITTED inspections to PENDING across ${schema}`);
+      }
+    } catch (normErr: any) {
+      console.warn(`⚠️ Could not normalize SUBMITTED -> PENDING:`, normErr?.message);
+      migrationLogs.push(`⚠️ SUBMITTED -> PENDING warning: ${normErr?.message}`);
+    }
+
+    // --- NORMALIZE L1-ONLY APPROVED -> VERIFIED (2-TIER FORMS, M05) ---
+    try {
+      const TWO_TIER_M05_FORM_TABLES = [
+        'forms_pqc',
+        'forms_fqc',
+        'forms_fsr',
+        'forms_step',
+        'forms_spr',
+        'forms_sqc_vt',
+        'forms_sqc_btp',
+        'forms_sqc_tp',
+        'forms_sqc_mat',
+      ];
+      const pool = await getPool();
+      const client = await pool.connect();
+      const normalizedIds: string[] = [];
+      const nowEpoch = Math.floor(Date.now() / 1000);
+      try {
+        await client.query('BEGIN');
+        for (const tbl of TWO_TIER_M05_FORM_TABLES) {
+          const cols = await getExistingColumns(tbl);
+          if (!cols.includes('signature_teamlead') || !cols.includes('signature_manager')) continue;
+          const updRes = await client.query(
+            `UPDATE "${schema}"."${tbl}"
+             SET status = 'VERIFIED',
+                 data = CASE
+                   WHEN "${schema}".try_parse_jsonb("data") IS NOT NULL
+                     THEN ("${schema}".try_parse_jsonb("data") || '{"status":"VERIFIED"}'::jsonb)::text
+                   ELSE "data"
+                 END
+             WHERE deleted_at IS NULL
+               AND UPPER(BTRIM(COALESCE(status, ''))) = 'APPROVED'
+               AND NULLIF(BTRIM(COALESCE(signature_teamlead, '')), '') IS NOT NULL
+               AND NULLIF(BTRIM(COALESCE(signature_manager, '')), '') IS NULL
+               AND NOT (
+                 "${schema}".try_parse_jsonb("data") IS NOT NULL
+                 AND NULLIF(BTRIM(COALESCE("${schema}".try_parse_jsonb("data")->>'managerSignature', '')), '') IS NOT NULL
+               )
+             RETURNING id`
+          );
+          for (const row of updRes.rows) {
+            if (row?.id) normalizedIds.push(String(row.id));
+          }
+        }
+
+        const uniqueIds = Array.from(new Set(normalizedIds));
+        if (uniqueIds.length > 0) {
+          await client.query(
+            `UPDATE "${schema}"."inspections"
+             SET status = 'VERIFIED',
+                 updated_at = $2
+             WHERE id = ANY($1::text[])
+               AND deleted_at IS NULL
+               AND UPPER(BTRIM(COALESCE(status, ''))) = 'APPROVED'`,
+            [uniqueIds, nowEpoch]
+          );
+
+          await client.query(
+            `UPDATE "${schema}"."inspection_traceability_index"
+             SET status = 'VERIFIED',
+                 updated_at = $2
+             WHERE inspection_id = ANY($1::text[])
+               AND UPPER(BTRIM(COALESCE(status, ''))) = 'APPROVED'`,
+            [uniqueIds, nowEpoch]
+          );
+
+          await client.query(
+            `INSERT INTO "${schema}"."audit_logs" (
+               id, user_id, action, entity_type, entity_id, old_value, new_value, timestamp, ip_address, user_agent
+             )
+             SELECT
+               gen_random_uuid(),
+               'SYSTEM',
+               'NORMALIZE_APPROVED_TO_VERIFIED',
+               'inspection',
+               t.insp_id,
+               '{"status":"APPROVED"}'::jsonb,
+               '{"status":"VERIFIED","note":"Chuẩn hóa phiếu 2 cấp chỉ có chữ ký L1 (chưa có chữ ký L2) từ APPROVED về VERIFIED"}'::jsonb,
+               $2,
+               NULL,
+               'migrationService:normalize_l1_approved'
+             FROM UNNEST($1::text[]) AS t(insp_id)`,
+            [uniqueIds, nowEpoch]
+          );
+          migrationLogs.push(`🔄 Normalized ${uniqueIds.length} L1-only APPROVED two-tier inspections to VERIFIED in ${schema}`);
+        }
+        await client.query('COMMIT');
+      } catch (txErr) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
+      }
+    } catch (l1NormErr: any) {
+      console.warn(`⚠️ Could not normalize L1-only APPROVED -> VERIFIED:`, l1NormErr?.message);
+      migrationLogs.push(`⚠️ L1-only APPROVED -> VERIFIED warning: ${l1NormErr?.message}`);
     }
 
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);

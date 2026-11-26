@@ -53,7 +53,8 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
   const commentCameraRef = useRef<HTMLInputElement>(null);
   const pdfRef = useRef<HTMLDivElement>(null);
 
-  const isApproved = ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
+  const isApproved = ['APPROVED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
+  const isVerifiedL1 = String(inspection.status || '').toUpperCase() === 'VERIFIED';
   const isGuest = user.role === 'GUEST';
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const canModify = !isGuest && canUserModifyInspection(inspection, user);
@@ -163,7 +164,7 @@ export const InspectionDetailIQC: React.FC<InspectionDetailProps> = ({ inspectio
               <div className="min-w-0">
                   <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight leading-none truncate">IQC REVIEW REPORT</h2>
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border ${isApproved ? 'bg-green-600 text-white border-green-600' : 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 border-orange-200 dark:border-orange-800'}`}>{inspection.status}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border ${isApproved ? 'bg-green-600 text-white border-green-600' : isVerifiedL1 ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 border-orange-200 dark:border-orange-800'}`}>{inspection.status}</span>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-bold tracking-tight uppercase tabular-nums">#{inspection.id.split('-').pop()}</span>
                   </div>
               </div>

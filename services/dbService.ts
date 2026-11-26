@@ -1481,132 +1481,355 @@ const firstNonEmptyStr = (...vals: any[]): string => {
   return '';
 };
 
-export async function getInspectionsExportRows(filters: any = {}, limit: number = 10000): Promise<any[]> {
-  const { items } = await getInspectionsList(filters, 1, limit);
-  if (!items || items.length === 0) return [];
+export function computeInspectionExportFields(
+  source: Record<string, any> = {},
+  materialsArg?: any[],
+  checkItemsArg?: any[]
+): { stageMain: string; subStage: string; exportStage: string; exportSummary: string; exportUnit: string } {
+  const materials = Array.isArray(materialsArg)
+    ? materialsArg
+    : Array.isArray(source.materials)
+    ? source.materials
+    : [];
+  const checkItems = Array.isArray(checkItemsArg)
+    ? checkItemsArg
+    : Array.isArray(source.items)
+    ? source.items
+    : [];
 
-  const groupedIds = new Map<string, string[]>();
-  for (const it of items) {
-    const tbl = resolveExportFormTable(it.type);
-    const list = groupedIds.get(tbl) || [];
-    list.push(it.id);
-    groupedIds.set(tbl, list);
-  }
+  const stageMain = firstNonEmptyStr(source.stage, source.inspectionStage);
+  const subStage = firstNonEmptyStr(source.subStage, source.sub_stage);
+  const exportStage =
+    stageMain && subStage && !stageMain.toLowerCase().includes(subStage.toLowerCase())
+      ? `${stageMain} (${subStage})`
+      : stageMain || subStage || '';
 
-  const formRowById = new Map<string, any>();
-  await Promise.all(
-    Array.from(groupedIds.entries()).map(async ([tableName, ids]) => {
-      try {
-        const res = await query(
-          `SELECT id, stage, sub_stage, dvt, summary, comment_production, materials_json, items_json, data
-           FROM ${SCHEMA}."${tableName}"
-           WHERE id = ANY($1::text[]) AND deleted_at IS NULL`,
-          [ids]
-        );
-        for (const r of res.rows) {
-          formRowById.set(String(r.id), r);
-        }
-      } catch (err) {
-        console.warn(`getInspectionsExportRows warning (${tableName}):`, err);
-      }
-    })
+  let exportSummary = firstNonEmptyStr(
+    source.summary,
+    source.conclusion,
+    source.notes,
+    source.remarks,
+    source.comment_production,
+    source.productionComment,
+    source.pmComment
   );
 
-  return items.map((item: any) => {
-    const formRow = formRowById.get(String(item.id));
-    const extraData = safeJsonParse<Record<string, any>>(formRow?.data, {});
-    const materials = Array.isArray(extraData.materials)
-      ? extraData.materials
-      : safeJsonParse<any[]>(formRow?.materials_json, []);
-    const checkItems = Array.isArray(extraData.items)
-      ? extraData.items
-      : safeJsonParse<any[]>(formRow?.items_json, []);
-
-    const stageMain = firstNonEmptyStr(
-      item.stage,
-      formRow?.stage,
-      extraData.stage,
-      extraData.inspectionStage
-    );
-    const subStage = firstNonEmptyStr(
-      item.subStage,
-      formRow?.sub_stage,
-      extraData.subStage,
-      extraData.sub_stage
-    );
-    const exportStage = stageMain && subStage && !stageMain.toLowerCase().includes(subStage.toLowerCase())
-      ? `${stageMain} (${subStage})`
-      : (stageMain || subStage || '');
-
-    let exportSummary = firstNonEmptyStr(
-      formRow?.summary,
-      extraData.summary,
-      extraData.conclusion,
-      extraData.notes,
-      extraData.remarks,
-      formRow?.comment_production,
-      extraData.productionComment,
-      extraData.pmComment,
-      item.summary,
-      item.conclusion,
-      item.notes,
-      item.remarks
-    );
-
-    if (!exportSummary) {
-      const detailNotes: string[] = [];
-      const seenNotes = new Set<string>();
-      for (const m of materials) {
-        const note = firstNonEmptyStr(m?.notes, m?.note, m?.ncr?.issueDescription, m?.ncr?.description);
+  if (!exportSummary) {
+    const detailNotes: string[] = [];
+    const seenNotes = new Set<string>();
+    for (const m of materials) {
+      const note = firstNonEmptyStr(m?.notes, m?.note, m?.ncr?.issueDescription, m?.ncr?.description);
+      if (note && !seenNotes.has(note)) {
+        seenNotes.add(note);
+        detailNotes.push(note);
+        if (detailNotes.length >= 3) break;
+      }
+    }
+    if (detailNotes.length < 3) {
+      for (const ci of checkItems) {
+        const note = firstNonEmptyStr(ci?.notes, ci?.ncr?.issueDescription, ci?.ncr?.description);
         if (note && !seenNotes.has(note)) {
           seenNotes.add(note);
           detailNotes.push(note);
           if (detailNotes.length >= 3) break;
         }
       }
-      if (detailNotes.length < 3) {
-        for (const ci of checkItems) {
-          const note = firstNonEmptyStr(ci?.notes, ci?.ncr?.issueDescription, ci?.ncr?.description);
-          if (note && !seenNotes.has(note)) {
-            seenNotes.add(note);
-            detailNotes.push(note);
-            if (detailNotes.length >= 3) break;
-          }
-        }
-      }
-      exportSummary = detailNotes.join('; ');
     }
+    exportSummary = detailNotes.join('; ');
+  }
 
-    let exportUnit = firstNonEmptyStr(
-      formRow?.dvt,
-      extraData.dvt,
-      extraData.unit,
-      extraData.uom,
-      item.dvt,
-      item.unit,
-      item.uom
+  let exportUnit = firstNonEmptyStr(source.dvt, source.unit, source.uom);
+  if (!exportUnit && materials.length > 0) {
+    const units = Array.from(
+      new Set(
+        materials
+          .map((m: any) => firstNonEmptyStr(m?.unit, m?.dvt, m?.uom))
+          .filter(Boolean)
+      )
     );
-    if (!exportUnit && materials.length > 0) {
-      const units = Array.from(
-        new Set(
-          materials
-            .map((m: any) => firstNonEmptyStr(m?.unit, m?.dvt, m?.uom))
-            .filter(Boolean)
-        )
-      );
-      exportUnit = units.join(', ');
-    }
+    exportUnit = units.join(', ');
+  }
 
-    const resolvedIpo = item.so_luong_ipo ?? extraData.so_luong_ipo ?? item.orderedQty;
+  return { stageMain, subStage, exportStage, exportSummary, exportUnit };
+}
+
+let cachedHasInspExportCols: boolean | null = null;
+async function hasInspectionExportCacheColumns(): Promise<boolean> {
+  if (cachedHasInspExportCols !== null) return cachedHasInspExportCols;
+  try {
+    const res = await query(
+      `SELECT COUNT(*)::int AS cnt
+       FROM information_schema.columns
+       WHERE table_schema = $1
+         AND table_name = 'inspections'
+         AND column_name IN ('export_summary', 'export_unit')`,
+      [SCHEMA.replace(/"/g, '')]
+    );
+    cachedHasInspExportCols = Number(res.rows[0]?.cnt || 0) >= 2;
+    return cachedHasInspExportCols;
+  } catch {
+    return false;
+  }
+}
+
+export function resetInspectionExportCacheFlag() {
+  cachedHasInspExportCols = null;
+}
+
+function buildSqlFormsExportExtractQuery(tableName: string, useSafeFn: boolean): string {
+  const parseExpr = (col: string) =>
+    useSafeFn ? `${SCHEMA}.try_parse_jsonb(${col})` : `${col}::jsonb`;
+
+  return `
+    WITH target AS (
+      SELECT id,
+        NULLIF(BTRIM(stage), '') AS stage_c,
+        NULLIF(BTRIM(sub_stage), '') AS sub_stage_c,
+        NULLIF(BTRIM(dvt), '') AS dvt_c,
+        COALESCE(NULLIF(BTRIM(summary), ''), NULLIF(BTRIM(comment_production), '')) AS sum_c,
+        so_luong_ipo,
+        CASE WHEN (NULLIF(BTRIM(stage), '') IS NULL OR NULLIF(BTRIM(dvt), '') IS NULL OR COALESCE(NULLIF(BTRIM(summary), ''), NULLIF(BTRIM(comment_production), '')) IS NULL)
+             AND LEFT(LTRIM(COALESCE(data, '')), 1) = '{'
+          THEN ${parseExpr('data')} ELSE NULL END AS dj,
+        CASE WHEN (NULLIF(BTRIM(dvt), '') IS NULL OR COALESCE(NULLIF(BTRIM(summary), ''), NULLIF(BTRIM(comment_production), '')) IS NULL)
+             AND LEFT(LTRIM(COALESCE(materials_json, '')), 1) = '['
+          THEN ${parseExpr('materials_json')} ELSE NULL END AS mj,
+        CASE WHEN COALESCE(NULLIF(BTRIM(summary), ''), NULLIF(BTRIM(comment_production), '')) IS NULL
+             AND LEFT(LTRIM(COALESCE(items_json, '')), 1) = '['
+          THEN ${parseExpr('items_json')} ELSE NULL END AS ij
+      FROM ${SCHEMA}."${tableName}"
+      WHERE id = ANY($1::text[]) AND deleted_at IS NULL
+    )
+    SELECT id,
+      COALESCE(stage_c, NULLIF(BTRIM(dj->>'stage'), ''), NULLIF(BTRIM(dj->>'inspectionStage'), ''), '') AS stage_out,
+      COALESCE(sub_stage_c, NULLIF(BTRIM(dj->>'subStage'), ''), NULLIF(BTRIM(dj->>'sub_stage'), ''), '') AS sub_stage_out,
+      COALESCE(
+        dvt_c,
+        NULLIF(BTRIM(dj->>'dvt'), ''),
+        NULLIF(BTRIM(dj->>'unit'), ''),
+        NULLIF(BTRIM(dj->>'uom'), ''),
+        (SELECT string_agg(u, ', ') FROM (
+          SELECT DISTINCT COALESCE(
+            NULLIF(BTRIM(elem->>'unit'), ''),
+            NULLIF(BTRIM(elem->>'dvt'), ''),
+            NULLIF(BTRIM(elem->>'uom'), '')
+          ) AS u
+          FROM jsonb_array_elements(
+            COALESCE(
+              CASE WHEN jsonb_typeof(dj->'materials') = 'array' THEN dj->'materials' ELSE NULL END,
+              CASE WHEN jsonb_typeof(mj) = 'array' THEN mj ELSE '[]'::jsonb END
+            )
+          ) elem
+        ) u_list WHERE u IS NOT NULL),
+        ''
+      ) AS dvt_out,
+      COALESCE(
+        sum_c,
+        NULLIF(BTRIM(dj->>'summary'), ''),
+        NULLIF(BTRIM(dj->>'conclusion'), ''),
+        NULLIF(BTRIM(dj->>'notes'), ''),
+        NULLIF(BTRIM(dj->>'remarks'), ''),
+        NULLIF(BTRIM(dj->>'productionComment'), ''),
+        NULLIF(BTRIM(dj->>'pmComment'), ''),
+        NULLIF(BTRIM((
+          SELECT string_agg(note_val, '; ') FROM (
+            SELECT note_val FROM (
+              SELECT COALESCE(
+                NULLIF(BTRIM(m->>'notes'), ''),
+                NULLIF(BTRIM(m->>'note'), ''),
+                NULLIF(BTRIM(m#>>'{ncr,issueDescription}'), ''),
+                NULLIF(BTRIM(m#>>'{ncr,description}'), '')
+              ) AS note_val
+              FROM jsonb_array_elements(
+                COALESCE(
+                  CASE WHEN jsonb_typeof(dj->'materials') = 'array' THEN dj->'materials' ELSE NULL END,
+                  CASE WHEN jsonb_typeof(mj) = 'array' THEN mj ELSE '[]'::jsonb END
+                )
+              ) m
+            ) m_notes
+            WHERE note_val IS NOT NULL
+            GROUP BY note_val
+            LIMIT 3
+          ) m_lim
+        )), ''),
+        NULLIF(BTRIM((
+          SELECT string_agg(note_val, '; ') FROM (
+            SELECT note_val FROM (
+              SELECT COALESCE(
+                NULLIF(BTRIM(ci->>'notes'), ''),
+                NULLIF(BTRIM(ci#>>'{ncr,issueDescription}'), ''),
+                NULLIF(BTRIM(ci#>>'{ncr,description}'), '')
+              ) AS note_val
+              FROM jsonb_array_elements(
+                COALESCE(
+                  CASE WHEN jsonb_typeof(dj->'items') = 'array' THEN dj->'items' ELSE NULL END,
+                  CASE WHEN jsonb_typeof(ij) = 'array' THEN ij ELSE '[]'::jsonb END
+                )
+              ) ci
+            ) ci_notes
+            WHERE note_val IS NOT NULL
+            GROUP BY note_val
+            LIMIT 3
+          ) ci_lim
+        )), ''),
+        ''
+      ) AS summary_out,
+      so_luong_ipo
+    FROM target
+  `;
+}
+
+async function fetchFormExportMetadataSql(groupedIds: Map<string, string[]>): Promise<Map<string, any>> {
+  const formRowById = new Map<string, any>();
+  if (groupedIds.size === 0) return formRowById;
+
+  await Promise.all(
+    Array.from(groupedIds.entries()).map(async ([tableName, ids]) => {
+      try {
+        let res;
+        try {
+          res = await query(buildSqlFormsExportExtractQuery(tableName, true), [ids]);
+        } catch {
+          res = await query(buildSqlFormsExportExtractQuery(tableName, false), [ids]);
+        }
+        for (const r of res.rows) {
+          formRowById.set(String(r.id), r);
+        }
+      } catch (err) {
+        console.warn(`fetchFormExportMetadataSql warning (${tableName}):`, err);
+      }
+    })
+  );
+  return formRowById;
+}
+
+export async function getInspectionsExportRows(filters: any = {}, limit: number = 20000): Promise<any[]> {
+  const { whereSql, params } = buildInspectionsWhereClause(filters, {
+    includeProject: true,
+    includeDateBounds: true,
+  });
+
+  const safeLimit = Math.max(1, Math.min(Number(limit) || 20000, 100000));
+  const hasCacheCols = await hasInspectionExportCacheColumns();
+  const cacheSelect = hasCacheCols ? ', export_summary, export_unit' : '';
+
+  const sql = `
+    SELECT
+      id, type, po_number, ma_ct, ten_ct, ma_nha_may, ten_hang_muc,
+      workshop, created_by, status, headcode, stage, sub_stage,
+      inspected_qty, passed_qty, failed_qty, so_luong_ipo,
+      CASE
+        WHEN ${EFFECTIVE_INSPECTION_TS_EXPR} IS NOT NULL AND ${EFFECTIVE_INSPECTION_TS_EXPR} > 0
+        THEN TO_CHAR((TO_TIMESTAMP(${EFFECTIVE_INSPECTION_TS_EXPR}) AT TIME ZONE 'Asia/Ho_Chi_Minh'), 'DD/MM/YYYY')
+        ELSE ''
+      END AS date_str${cacheSelect}
+    FROM ${SCHEMA}.inspections
+    ${whereSql}
+    ORDER BY ${EFFECTIVE_INSPECTION_TS_EXPR} DESC NULLS LAST, created_at DESC NULLS LAST
+    LIMIT $${params.length + 1}
+  `;
+
+  const res = await query(sql, [...params, safeLimit]);
+  const rows = res.rows;
+  if (!rows || rows.length === 0) return [];
+
+  // Only query forms_* tables for rows whose export_summary/export_unit are not yet cached (NULL)
+  const groupedUnbackfilledIds = new Map<string, string[]>();
+  for (const row of rows) {
+    const needsFallback =
+      !hasCacheCols ||
+      row.export_summary === null ||
+      row.export_summary === undefined ||
+      row.export_unit === null ||
+      row.export_unit === undefined;
+    if (needsFallback) {
+      const tbl = resolveExportFormTable(row.type);
+      const list = groupedUnbackfilledIds.get(tbl) || [];
+      list.push(row.id);
+      groupedUnbackfilledIds.set(tbl, list);
+    }
+  }
+
+  const formMetaById = await fetchFormExportMetadataSql(groupedUnbackfilledIds);
+
+  // Persist resolved cache asynchronously for unbackfilled rows so subsequent exports are 100% single-table
+  if (hasCacheCols && groupedUnbackfilledIds.size > 0) {
+    const idsToPersist: string[] = [];
+    const sumToPersist: string[] = [];
+    const unitToPersist: string[] = [];
+    const stageToPersist: string[] = [];
+    for (const row of rows) {
+      const needsFallback =
+        row.export_summary === null ||
+        row.export_summary === undefined ||
+        row.export_unit === null ||
+        row.export_unit === undefined;
+      if (!needsFallback) continue;
+      const meta = formMetaById.get(String(row.id));
+      idsToPersist.push(String(row.id));
+      sumToPersist.push(meta?.summary_out ?? '');
+      unitToPersist.push(meta?.dvt_out ?? '');
+      stageToPersist.push(firstNonEmptyStr(row.stage, meta?.stage_out));
+    }
+    if (idsToPersist.length > 0 && idsToPersist.length <= 5000) {
+      query(
+        `UPDATE ${SCHEMA}.inspections i
+         SET export_summary = COALESCE(i.export_summary, v.es),
+             export_unit = COALESCE(i.export_unit, v.eu),
+             stage = COALESCE(NULLIF(BTRIM(i.stage), ''), NULLIF(v.st, ''), i.stage)
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[]) AS v(id, es, eu, st)
+         WHERE i.id = v.id`,
+        [idsToPersist, sumToPersist, unitToPersist, stageToPersist]
+      ).catch((err) => console.warn('Async export cache persist warning:', err?.message || err));
+    }
+  }
+
+  return rows.map((row: any) => {
+    const meta = formMetaById.get(String(row.id));
+
+    const stageMain = firstNonEmptyStr(row.stage, meta?.stage_out);
+    const subStage = firstNonEmptyStr(row.sub_stage, meta?.sub_stage_out);
+    const exportStage =
+      stageMain && subStage && !stageMain.toLowerCase().includes(subStage.toLowerCase())
+        ? `${stageMain} (${subStage})`
+        : stageMain || subStage || '';
+
+    const exportSummary = hasCacheCols && row.export_summary !== null && row.export_summary !== undefined
+      ? String(row.export_summary)
+      : String(meta?.summary_out ?? '');
+
+    const exportUnit = hasCacheCols && row.export_unit !== null && row.export_unit !== undefined
+      ? String(row.export_unit)
+      : String(meta?.dvt_out ?? '');
+
+    const resolvedIpo =
+      row.so_luong_ipo !== null && row.so_luong_ipo !== undefined
+        ? Number(row.so_luong_ipo)
+        : meta?.so_luong_ipo !== null && meta?.so_luong_ipo !== undefined
+        ? Number(meta.so_luong_ipo)
+        : undefined;
 
     return {
-      ...item,
+      id: row.id,
+      type: row.type || 'SQC_BTP',
+      po_number: row.po_number || undefined,
+      poNumber: row.po_number || undefined,
+      ma_ct: row.ma_ct || '',
+      ten_ct: row.ten_ct || '',
+      ma_nha_may: row.ma_nha_may || '',
+      ten_hang_muc: row.ten_hang_muc || '',
+      workshop: row.workshop || '',
+      inspectorName: row.created_by || '',
+      created_by: row.created_by || '',
+      status: row.status || 'pending',
+      date: row.date_str || '',
+      headcode: row.headcode || '',
+      stage: stageMain,
+      subStage,
+      inspectedQuantity: row.inspected_qty !== null && row.inspected_qty !== undefined ? Number(row.inspected_qty) : undefined,
+      passedQuantity: row.passed_qty !== null && row.passed_qty !== undefined ? Number(row.passed_qty) : undefined,
+      failedQuantity: row.failed_qty !== null && row.failed_qty !== undefined ? Number(row.failed_qty) : undefined,
       so_luong_ipo: resolvedIpo,
-      stage: stageMain || item.stage || '',
-      subStage: subStage || item.subStage || '',
-      dvt: exportUnit,
-      unit: exportUnit,
-      summary: exportSummary,
       exportStage,
       exportSummary,
       exportUnit,
@@ -1614,9 +1837,85 @@ export async function getInspectionsExportRows(filters: any = {}, limit: number 
   });
 }
 
+let exportBackfillRunning = false;
+export async function backfillInspectionExportColumns(batchSize: number = 1000, maxBatches: number = 200): Promise<{ updated: number }> {
+  if (exportBackfillRunning) return { updated: 0 };
+  const hasCacheCols = await hasInspectionExportCacheColumns();
+  if (!hasCacheCols) return { updated: 0 };
+
+  exportBackfillRunning = true;
+  let totalUpdated = 0;
+  try {
+    for (let batch = 0; batch < maxBatches; batch++) {
+      const pendingRes = await query(
+        `SELECT id, type, stage, sub_stage, so_luong_ipo
+         FROM ${SCHEMA}.inspections
+         WHERE COALESCE(UPPER(status), '') <> 'DELETED'
+           AND (export_summary IS NULL OR export_unit IS NULL)
+         ORDER BY ${EFFECTIVE_INSPECTION_TS_EXPR} DESC NULLS LAST, created_at DESC NULLS LAST
+         LIMIT $1`,
+        [batchSize]
+      );
+      if (!pendingRes.rows || pendingRes.rows.length === 0) break;
+
+      const groupedIds = new Map<string, string[]>();
+      for (const r of pendingRes.rows) {
+        const tbl = resolveExportFormTable(r.type);
+        const list = groupedIds.get(tbl) || [];
+        list.push(r.id);
+        groupedIds.set(tbl, list);
+      }
+
+      const metaById = await fetchFormExportMetadataSql(groupedIds);
+      const ids: string[] = [];
+      const summaries: string[] = [];
+      const units: string[] = [];
+      const stages: string[] = [];
+      const subStages: string[] = [];
+      const ipos: (number | null)[] = [];
+
+      for (const r of pendingRes.rows) {
+        const meta = metaById.get(String(r.id));
+        ids.push(String(r.id));
+        summaries.push(meta?.summary_out ?? '');
+        units.push(meta?.dvt_out ?? '');
+        stages.push(firstNonEmptyStr(r.stage, meta?.stage_out));
+        subStages.push(firstNonEmptyStr(r.sub_stage, meta?.sub_stage_out));
+        const ipoVal =
+          r.so_luong_ipo !== null && r.so_luong_ipo !== undefined
+            ? Number(r.so_luong_ipo)
+            : meta?.so_luong_ipo !== null && meta?.so_luong_ipo !== undefined
+            ? Number(meta.so_luong_ipo)
+            : null;
+        ipos.push(ipoVal !== null && Number.isFinite(ipoVal) ? ipoVal : null);
+      }
+
+      await query(
+        `UPDATE ${SCHEMA}.inspections i
+         SET export_summary = COALESCE(i.export_summary, v.es),
+             export_unit = COALESCE(i.export_unit, v.eu),
+             stage = COALESCE(NULLIF(BTRIM(i.stage), ''), NULLIF(v.st, ''), i.stage),
+             sub_stage = COALESCE(NULLIF(BTRIM(i.sub_stage), ''), NULLIF(v.sst, ''), i.sub_stage),
+             so_luong_ipo = COALESCE(i.so_luong_ipo, v.ipo)
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::numeric[]) AS v(id, es, eu, st, sst, ipo)
+         WHERE i.id = v.id`,
+        [ids, summaries, units, stages, subStages, ipos]
+      );
+      totalUpdated += ids.length;
+      if (pendingRes.rows.length < batchSize) break;
+    }
+  } catch (err: any) {
+    console.warn('backfillInspectionExportColumns warning:', err?.message || err);
+  } finally {
+    exportBackfillRunning = false;
+  }
+  return { updated: totalUpdated };
+}
+
 export async function syncMissingInspectionsFromForms(): Promise<{ inserted: number; updated: number }> {
   let inserted = 0;
   let updated = 0;
+  const hasCacheCols = await hasInspectionExportCacheColumns();
 
   for (const table of ALL_FORM_TABLES) {
     try {
@@ -1636,40 +1935,60 @@ export async function syncMissingInspectionsFromForms(): Promise<{ inserted: num
         const updatedTs = parseUnixSeconds(row.updated_at) ?? parseUnixSeconds(extraData.updated_at) ?? createdTs;
         const poNum = row.po_number || extraData.po_number || extraData.poNumber || null;
 
+        const materials = Array.isArray(extraData.materials)
+          ? extraData.materials
+          : safeJsonParse<any[]>(row.materials_json, []);
+        const checkItems = Array.isArray(extraData.items)
+          ? extraData.items
+          : safeJsonParse<any[]>(row.items_json, []);
+        const exportFields = computeInspectionExportFields(
+          {
+            ...extraData,
+            stage: row.stage || extraData.stage,
+            subStage: row.sub_stage || extraData.subStage,
+            summary: row.summary || extraData.summary,
+            comment_production: row.comment_production || extraData.productionComment,
+            dvt: row.dvt || extraData.dvt,
+          },
+          materials,
+          checkItems
+        );
+
+        const cols = [
+          'id', 'created_at', 'updated_at', 'created_by', 'ma_ct', 'ten_ct', 'ma_nha_may', 'ten_hang_muc',
+          'workshop', 'status', 'type', 'score', 'headcode', 'stage', 'sub_stage',
+          'inspected_qty', 'passed_qty', 'failed_qty', 'so_luong_ipo', 'priority', 'date', 'po_number',
+          ...(hasCacheCols ? ['export_summary', 'export_unit'] : []),
+        ];
+        const vals: any[] = [
+          row.id,
+          createdTs,
+          updatedTs,
+          row.inspector_name || row.inspector || row.created_by || extraData.inspectorName || '',
+          row.ma_ct || extraData.ma_ct || '',
+          row.ten_ct || extraData.ten_ct || '',
+          row.ma_nha_may || row.supplier || extraData.ma_nha_may || '',
+          row.ten_hang_muc || extraData.ten_hang_muc || '',
+          row.workshop || extraData.workshop || '',
+          row.status || extraData.status || 'pending',
+          type,
+          row.score !== null && row.score !== undefined ? Number(row.score) : (extraData.score ?? null),
+          row.headcode || extraData.headcode || '',
+          exportFields.stageMain || '',
+          exportFields.subStage || '',
+          row.inspected_qty ?? row.qty_total ?? extraData.inspectedQuantity ?? null,
+          row.passed_qty ?? row.qty_pass ?? extraData.passedQuantity ?? null,
+          row.failed_qty ?? row.qty_fail ?? extraData.failedQuantity ?? null,
+          row.so_luong_ipo ?? row.sl_ipo ?? extraData.so_luong_ipo ?? null,
+          row.priority || extraData.priority || null,
+          rawDateTs ?? createdTs,
+          poNum,
+          ...(hasCacheCols ? [exportFields.exportSummary, exportFields.exportUnit] : []),
+        ];
+        const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
         await query(
-          `INSERT INTO ${SCHEMA}.inspections (
-            id, created_at, updated_at, created_by, ma_ct, ten_ct, ma_nha_may, ten_hang_muc,
-            workshop, status, type, score, headcode, stage, sub_stage,
-            inspected_qty, passed_qty, failed_qty, so_luong_ipo, priority, date, po_number
-          ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8,
-            $9, $10, $11, $12, $13, $14, $15,
-            $16, $17, $18, $19, $20, $21, $22
-          ) ON CONFLICT (id) DO NOTHING`,
-          [
-            row.id,
-            createdTs,
-            updatedTs,
-            row.inspector_name || row.inspector || row.created_by || extraData.inspectorName || '',
-            row.ma_ct || extraData.ma_ct || '',
-            row.ten_ct || extraData.ten_ct || '',
-            row.ma_nha_may || row.supplier || extraData.ma_nha_may || '',
-            row.ten_hang_muc || extraData.ten_hang_muc || '',
-            row.workshop || extraData.workshop || '',
-            row.status || extraData.status || 'pending',
-            type,
-            row.score !== null && row.score !== undefined ? Number(row.score) : (extraData.score ?? null),
-            row.headcode || extraData.headcode || '',
-            row.stage || extraData.stage || '',
-            row.sub_stage || extraData.subStage || '',
-            row.inspected_qty ?? row.qty_total ?? extraData.inspectedQuantity ?? null,
-            row.passed_qty ?? row.qty_pass ?? extraData.passedQuantity ?? null,
-            row.failed_qty ?? row.qty_fail ?? extraData.failedQuantity ?? null,
-            row.so_luong_ipo ?? row.sl_ipo ?? extraData.so_luong_ipo ?? null,
-            row.priority || extraData.priority || null,
-            rawDateTs ?? createdTs,
-            poNum,
-          ]
+          `INSERT INTO ${SCHEMA}.inspections (${cols.join(', ')}) VALUES (${placeholders}) ON CONFLICT (id) DO NOTHING`,
+          vals
         );
         inserted++;
       }
@@ -1767,19 +2086,12 @@ function toGmt7Ymd(val: any): string {
   }
   const ts = parseUnixSeconds(val);
   if (ts && ts > 0) {
-    try {
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Ho_Chi_Minh',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).formatToParts(new Date(ts * 1000));
-      const y = parts.find(p => p.type === 'year')?.value;
-      const m = parts.find(p => p.type === 'month')?.value;
-      const d = parts.find(p => p.type === 'day')?.value;
-      if (y && m && d) return `${y}-${m}-${d}`;
-    } catch {
-      return '';
+    const dGmt7 = new Date((ts + 7 * 3600) * 1000);
+    if (!isNaN(dGmt7.getTime())) {
+      const y = dGmt7.getUTCFullYear();
+      const m = String(dGmt7.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(dGmt7.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
   }
   return '';
@@ -4482,29 +4794,74 @@ export async function deleteNcr(id: string, actorId?: string | null): Promise<bo
   return true;
 }
 
-// [Update - Danh Sách Phiếu] - [2026-11-14 / v3.1.0] - Truy vấn nhật ký truy vết ISO Audit Trail theo entity_type='inspection'
+// [Update - Danh Sách Phiếu] - [2026-11-26 / v3.1.0] - Truy vấn nhật ký truy vết ISO Audit Trail kèm Họ và tên đầy đủ từ bảng users
 export async function getInspectionAuditLogs(inspectionId: string) {
   const res = await query(
-    `SELECT id, user_id, action, entity_type, entity_id, old_value, new_value, timestamp, ip_address, user_agent
-     FROM ${SCHEMA}.audit_logs
-     WHERE entity_type = 'inspection' AND entity_id = $1
-     ORDER BY timestamp DESC
+    `SELECT
+       a.id,
+       a.user_id,
+       NULLIF(TRIM(u.name), '') AS matched_user_name,
+       a.action,
+       a.entity_type,
+       a.entity_id,
+       a.old_value,
+       a.new_value,
+       a.timestamp,
+       a.ip_address,
+       a.user_agent
+     FROM ${SCHEMA}.audit_logs a
+     LEFT JOIN LATERAL (
+       SELECT name
+       FROM ${SCHEMA}.users u
+       WHERE u.id = a.user_id
+          OR (NULLIF(TRIM(u.username), '') IS NOT NULL AND LOWER(u.username) = LOWER(a.user_id))
+          OR (NULLIF(TRIM(u.msnv), '') IS NOT NULL AND LOWER(u.msnv) = LOWER(a.user_id))
+       ORDER BY (u.id = a.user_id) DESC
+       LIMIT 1
+     ) u ON TRUE
+     WHERE a.entity_type = 'inspection' AND a.entity_id = $1
+     ORDER BY a.timestamp DESC
      LIMIT 200`,
     [inspectionId]
   );
 
-  return res.rows.map((row: any) => ({
-    id: row.id,
-    user_id: row.user_id,
-    action: row.action,
-    entity_type: row.entity_type,
-    entity_id: row.entity_id,
-    old_value: safeJsonParse(row.old_value, row.old_value ?? null),
-    new_value: safeJsonParse(row.new_value, row.new_value ?? null),
-    timestamp: row.timestamp != null && !isNaN(Number(row.timestamp)) ? Number(row.timestamp) : row.timestamp,
-    ip_address: row.ip_address ?? null,
-    user_agent: row.user_agent ?? null,
-  }));
+  return res.rows.map((row: any) => {
+    const oldVal = safeJsonParse(row.old_value, row.old_value ?? null);
+    const newVal = safeJsonParse(row.new_value, row.new_value ?? null);
+    const rawUid = String(row.user_id || '').trim();
+    const isInternalId = /^user_[a-z0-9_]+$/i.test(rawUid) || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(rawUid);
+
+    let resolvedUserName = String(row.matched_user_name || '').trim();
+    if (!resolvedUserName && rawUid && rawUid.toLowerCase() !== 'system' && !isInternalId) {
+      resolvedUserName = rawUid;
+    }
+    if (!resolvedUserName && newVal && typeof newVal === 'object') {
+      if (row.action === 'APPROVE_INSPECTION' && newVal.managerName) {
+        resolvedUserName = String(newVal.managerName).trim();
+      } else if (row.action === 'VERIFY_INSPECTION' && newVal.teamLeadName) {
+        resolvedUserName = String(newVal.teamLeadName).trim();
+      } else if (row.action === 'CREATE_INSPECTION' && (newVal.inspectorName || newVal.inspector_name)) {
+        resolvedUserName = String(newVal.inspectorName || newVal.inspector_name).trim();
+      }
+    }
+    if (!resolvedUserName) {
+      resolvedUserName = rawUid.toLowerCase() === 'system' ? 'Hệ thống' : (isInternalId ? 'Nhân sự hệ thống' : (rawUid || 'Hệ thống'));
+    }
+
+    return {
+      id: row.id,
+      user_id: row.user_id,
+      user_name: resolvedUserName,
+      action: row.action,
+      entity_type: row.entity_type,
+      entity_id: row.entity_id,
+      old_value: oldVal,
+      new_value: newVal,
+      timestamp: row.timestamp != null && !isNaN(Number(row.timestamp)) ? Number(row.timestamp) : row.timestamp,
+      ip_address: row.ip_address ?? null,
+      user_agent: row.user_agent ?? null,
+    };
+  });
 }
 
 // [Update - Cài Đặt / Thông Báo] - [2026-11-14 / v3.1.0] - Quản lý thông báo người dùng theo đúng user_id

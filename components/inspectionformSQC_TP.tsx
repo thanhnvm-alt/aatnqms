@@ -26,6 +26,16 @@ import { SignaturePad } from './SignaturePad';
 import { ProxyImage } from '../src/components/ProxyImage';
 import { getProxyImageUrl } from '../src/utils';
 import { Combobox, ConfirmDialog, FormAlertBanner, FormAlertState, extractFormErrorMessage } from '../src/components/qms';
+import {
+  sanitizeDecimalInput,
+  parseQty,
+  subQty,
+  sumQty,
+  compareQty,
+  isQtySumEqual,
+  calcQtyRatePercent,
+  normalizePayloadQuantities,
+} from '../src/utils/quantityMath';
 import { BookingReferenceDocsCard } from './BookingReferenceDocsCard';
 import { BookingSelectorField } from './BookingSelectorField';
 import { buildSqcPrefillFromBooking } from '../src/utils/bookingDocuments';
@@ -197,7 +207,7 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
     if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
-        value = value.replace(/,/g, '.');
+        value = sanitizeDecimalInput(value);
     }  setFormData(prev => ({ ...prev, [field]: value })); };
 
   const handleGetLocation = () => {
@@ -318,13 +328,13 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
 
   const updateMaterial = (idx: number, field: string, value: any) => {
     if (typeof value === 'string' && ['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
-        value = value.replace(/,/g, '.');
+        value = sanitizeDecimalInput(value);
     } 
     setFormData(prev => {
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
-        let val = value;
-        let mat = { ...nextMaterials[idx], [field]: val };
+        const val = value;
+        const mat: any = { ...nextMaterials[idx], [field]: val };
         if (field === 'category') {
             const btpTpl = templates['SQC_TP'] || [];
             
@@ -348,9 +358,30 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
             // Add defaults if they are missing (simplified)
             if (mat.items.length === 0) mat.items = defaultItems;
         }
-        if (field === 'inspectQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
-        else if (field === 'passQty') mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
-        else if (field === 'failQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
+        if (field === 'inspectQty') {
+            if (compareQty(mat.failQty, val) > 0) {
+                mat.failQty = 0;
+                mat.passQty = parseQty(val);
+            } else {
+                mat.passQty = Math.max(0, subQty(val, mat.failQty));
+            }
+        } else if (field === 'passQty') {
+            const insQty = parseQty(mat.inspectQty);
+            if (compareQty(val, insQty) > 0) {
+                mat.passQty = insQty;
+                mat.failQty = 0;
+            } else {
+                mat.failQty = Math.max(0, subQty(insQty, val));
+            }
+        } else if (field === 'failQty') {
+            const insQty = parseQty(mat.inspectQty);
+            if (compareQty(val, insQty) > 0) {
+                mat.failQty = insQty;
+                mat.passQty = 0;
+            } else {
+                mat.passQty = Math.max(0, subQty(insQty, val));
+            }
+        }
         nextMaterials[idx] = mat;
         return { ...prev, materials: nextMaterials };
     });
@@ -492,7 +523,7 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
     }
   };
 
-  const handleSubmit = async (targetStatus: InspectionStatus = InspectionStatus.SUBMITTED) => {
+  const handleSubmit = async (targetStatus: InspectionStatus = InspectionStatus.PENDING) => {
     setFormAlert(null);
     if (targetStatus === InspectionStatus.SUBMITTED || targetStatus === InspectionStatus.PENDING) {
       if (!formData.po_number || !formData.supplier || !formData.supplierAddress) {
@@ -504,7 +535,7 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
           return;
       }
 
-      const invalidQtySum = formData.materials?.find(m => (Number(m.passQty || 0) + Number(m.failQty || 0)) !== Number(m.inspectQty || 0));
+      const invalidQtySum = formData.materials?.find(m => !isQtySumEqual(m.passQty, m.failQty, m.inspectQty));
       if (invalidQtySum) {
           setFormAlert({ type: 'warning', title: 'Sai lệch số lượng', message: `Thành phẩm "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.` });
           return;
@@ -519,11 +550,11 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
     setIsSaving(true);
     setUploadProgress(0);
     try {
-        const totalInspected = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
-        const totalPassed = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
-        const totalFailed = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
+        const totalInspected = sumQty((formData.materials || []).map((mat: any) => mat.inspectQty));
+        const totalPassed = sumQty((formData.materials || []).map((mat: any) => mat.passQty));
+        const totalFailed = sumQty((formData.materials || []).map((mat: any) => mat.failQty));
 
-        const workingDraft: any = {
+        const workingDraft: any = normalizePayloadQuantities({
             ...JSON.parse(JSON.stringify(formData)),
             booking_id: formData.booking_id,
             booking_code: formData.booking_code,
@@ -533,7 +564,7 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
             failedQuantity: totalFailed,
             splitRequired: targetStatus !== InspectionStatus.DRAFT && (formData.id || '').split('-').length <= 3,
             updatedAt: new Date().toISOString()
-        };
+        });
 
         const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
             setUploadProgress(pct);
@@ -778,9 +809,9 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
             <div className="space-y-3">
                 {filteredMaterials.map((mat, matIdx) => {
                     const isExp = expandedMaterial === mat.id;
-                    const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
-                    const failRate = mat.inspectQty > 0 ? ((mat.failQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
-                    const hasError = mat.failQty > 0;
+                    const passRate = calcQtyRatePercent(mat.passQty, mat.inspectQty, 1);
+                    const failRate = calcQtyRatePercent(mat.failQty, mat.inspectQty, 1);
+                    const hasError = parseQty(mat.failQty) > 0;
                     return (
                     <div key={mat.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
                         <div className={`p-3 min-h-[56px] flex items-center justify-between cursor-pointer transition-colors ${isExp ? 'bg-teal-50/50 dark:bg-teal-900/20 border-b border-teal-100 dark:border-slate-700' : 'bg-white dark:bg-slate-900'}`} onClick={() => setExpandedMaterial(isExp ? null : mat.id)}>
@@ -995,7 +1026,7 @@ export const InspectionFormSQC_TP: React.FC<InspectionFormProps> = ({ initialDat
           />
         </section>
       </div>
-      <div className="px-4 py-3 lg:pr-24 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"><button onClick={onCancel} className="min-h-[44px] lg:min-h-[40px] px-4 sm:px-6 text-slate-600 dark:text-slate-300 font-bold uppercase tracking-widest rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]" type="button">HỦY BỎ</button><button onClick={() => handleSubmit(InspectionStatus.DRAFT)} disabled={isSaving} className="min-h-[44px] lg:min-h-[40px] px-4 sm:px-6 text-blue-600 dark:text-blue-400 border border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-slate-800 font-bold uppercase tracking-widest rounded-xl shadow-sm text-[11px] whitespace-nowrap" type="button">LƯU NHÁP</button><button onClick={() => handleSubmit(InspectionStatus.SUBMITTED)} disabled={isSaving} className="min-h-[44px] lg:min-h-[40px] flex-1 bg-teal-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-teal-800 flex items-center justify-center gap-2 disabled:opacity-50 text-[11px]" type="button">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}<span>GỬI DUYỆT SQC-TP</span></button></div>
+      <div className="px-4 py-3 lg:pr-24 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sticky bottom-0 z-40 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]"><button onClick={onCancel} className="min-h-[44px] lg:min-h-[40px] px-4 sm:px-6 text-slate-600 dark:text-slate-300 font-bold uppercase tracking-widest rounded-xl border border-slate-200 dark:border-slate-700 text-[11px]" type="button">HỦY BỎ</button><button onClick={() => handleSubmit(InspectionStatus.DRAFT)} disabled={isSaving} className="min-h-[44px] lg:min-h-[40px] px-4 sm:px-6 text-blue-600 dark:text-blue-400 border border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-slate-800 font-bold uppercase tracking-widest rounded-xl shadow-sm text-[11px] whitespace-nowrap" type="button">LƯU NHÁP</button><button onClick={() => handleSubmit(InspectionStatus.PENDING)} disabled={isSaving} className="min-h-[44px] lg:min-h-[40px] flex-1 bg-teal-700 text-white font-bold uppercase tracking-widest rounded-xl shadow-lg hover:bg-teal-800 flex items-center justify-center gap-2 disabled:opacity-50 text-[11px]" type="button">{isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}<span>GỬI DUYỆT SQC-TP</span></button></div>
       <ConfirmDialog
         open={deleteMatIdx !== null}
         variant="danger"

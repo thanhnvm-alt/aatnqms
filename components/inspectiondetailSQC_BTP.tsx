@@ -63,7 +63,8 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
   const commentCameraRef = useRef<HTMLInputElement>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
-  const isApproved = ['APPROVED', 'VERIFIED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
+  const isApproved = ['APPROVED', 'LOCKED', 'COMPLETED'].includes(String(inspection.status || '').toUpperCase());
+  const isVerifiedL1 = String(inspection.status || '').toUpperCase() === 'VERIFIED';
   const isGuest = user.role === 'GUEST';
   const isManager = user.role === 'ADMIN' || user.role === 'MANAGER';
   const canModify = !isGuest && canUserModifyInspection(inspection, user);
@@ -197,7 +198,7 @@ export const InspectionDetailSQC_BTP: React.FC<InspectionDetailProps> = ({
               <div className="flex items-center gap-2 flex-wrap min-w-0">
                   <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight truncate">Review: SQC - Bán thành phẩm</h2>
                   <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border tracking-widest ${isApproved ? 'bg-green-600 text-white border-green-600' : 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 border-orange-200 dark:border-orange-800'}`}>{inspection.status}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border tracking-widest ${isApproved ? 'bg-green-600 text-white border-green-600' : isVerifiedL1 ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-300 border-orange-200 dark:border-orange-800'}`}>{inspection.status}</span>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono font-medium uppercase tracking-tight tabular-nums">#{inspection.id.split('-').pop()}</span>
                       {inspection.booking_code && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[10px] font-mono font-bold tabular-nums">

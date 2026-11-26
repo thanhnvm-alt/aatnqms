@@ -13,6 +13,16 @@ import { fetchPlans, uploadQMSImage, uploadQMSImagesBatch, preprocessInspectionP
 import { QRScannerModal } from './QRScannerModal';
 import { ImageEditorModal } from './ImageEditorModal';
 import { PersistenceService } from '../services/persistenceService';
+import {
+  sanitizeDecimalInput,
+  parseQty,
+  subQty,
+  sumQty,
+  compareQty,
+  isQtySumEqual,
+  calcQtyRatePercent,
+  normalizePayloadQuantities,
+} from '../src/utils/quantityMath';
 
 interface InspectionFormProps {
   initialData?: Partial<Inspection>;
@@ -299,7 +309,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
   const handleInputChange = (field: keyof Inspection, value: any) => {
     if (typeof value === 'string' && ['inspectedQuantity', 'passedQuantity', 'failedQuantity', 'orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
-        value = value.replace(/,/g, '.');
+        value = sanitizeDecimalInput(value);
     }  
     setFormData(prev => ({ ...prev, [field]: value })); 
   };
@@ -331,23 +341,43 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
 
   const updateMaterial = (idx: number, field: string, value: any) => {
     if (typeof value === 'string' && ['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty', 'so_luong_ipo'].includes(field)) {
-        value = value.replace(/,/g, '.');
+        value = sanitizeDecimalInput(value);
     } 
     setFormData(prev => {
         const nextMaterials = [...(prev.materials || [])];
         if (!nextMaterials[idx]) return prev;
-        let val = value;
-        if (['orderQty', 'deliveryQty', 'inspectQty', 'passQty', 'failQty'].includes(field)) { val = value; }
-        let mat = { ...nextMaterials[idx], [field]: val };
+        const val = value;
+        const mat: any = { ...nextMaterials[idx], [field]: val };
         
         if (field === 'category') {
             const iqcTpl = templates['IQC'] || templates['SQC_MAT'] || [];
             mat.items = iqcTpl.filter(i => i.category === value).map(i => ({ ...i, id: `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, status: CheckStatus.PENDING, notes: '', images: [] }));
         }
         
-        if (field === 'inspectQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
-        else if (field === 'passQty') mat.failQty = Math.max(0, (mat.inspectQty || 0) - (mat.passQty || 0));
-        else if (field === 'failQty') mat.passQty = Math.max(0, (mat.inspectQty || 0) - (mat.failQty || 0));
+        if (field === 'inspectQty') {
+            if (compareQty(mat.failQty, val) > 0) {
+                mat.failQty = 0;
+                mat.passQty = parseQty(val);
+            } else {
+                mat.passQty = Math.max(0, subQty(val, mat.failQty));
+            }
+        } else if (field === 'passQty') {
+            const insQty = parseQty(mat.inspectQty);
+            if (compareQty(val, insQty) > 0) {
+                mat.passQty = insQty;
+                mat.failQty = 0;
+            } else {
+                mat.failQty = Math.max(0, subQty(insQty, val));
+            }
+        } else if (field === 'failQty') {
+            const insQty = parseQty(mat.inspectQty);
+            if (compareQty(val, insQty) > 0) {
+                mat.failQty = insQty;
+                mat.passQty = 0;
+            } else {
+                mat.passQty = Math.max(0, subQty(insQty, val));
+            }
+        }
 
         if (field === 'scope') { 
             if (value === 'COMMON') { 
@@ -544,7 +574,7 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
         return;
     }
 
-    const invalidQtySum = formData.materials?.find(m => (Number(m.passQty || 0) + Number(m.failQty || 0)) !== Number(m.inspectQty || 0));
+    const invalidQtySum = formData.materials?.find(m => !isQtySumEqual(m.passQty, m.failQty, m.inspectQty));
     if (invalidQtySum) {
         setFormAlert({ type: 'warning', title: 'Sai lệch số lượng', message: `Vật tư "${invalidQtySum.name || 'chưa đặt tên'}" có tổng số lượng Đạt và Lỗi phải đúng bằng Số lượng kiểm tra.` });
         return;
@@ -553,20 +583,20 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
     setIsSaving(true);
     setUploadProgress(0);
     try {
-        const totalInspected = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.inspectQty) || 0), 0);
-        const totalPassed = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.passQty) || 0), 0);
-        const totalFailed = (formData.materials || []).reduce((acc: number, mat: any) => acc + (Number(mat.failQty) || 0), 0);
+        const totalInspected = sumQty((formData.materials || []).map((mat: any) => mat.inspectQty));
+        const totalPassed = sumQty((formData.materials || []).map((mat: any) => mat.passQty));
+        const totalFailed = sumQty((formData.materials || []).map((mat: any) => mat.failQty));
 
-        const workingDraft: Inspection = {
+        const workingDraft: Inspection = normalizePayloadQuantities({
             ...JSON.parse(JSON.stringify(formData)),
             booking_id: formData.booking_id,
             booking_code: formData.booking_code,
-            status: InspectionStatus.SUBMITTED,
+            status: InspectionStatus.PENDING,
             inspectedQuantity: totalInspected,
             passedQuantity: totalPassed,
             failedQuantity: totalFailed,
             updatedAt: new Date().toISOString()
-        };
+        });
 
         const preparedInspection = await preprocessInspectionPayloadForStorage(workingDraft, (pct) => {
             setUploadProgress(pct);
@@ -811,8 +841,8 @@ export const InspectionFormSQC_VT: React.FC<InspectionFormProps> = ({ initialDat
             <div className="space-y-3">
                 {filteredMaterials.map((mat, matIdx) => {
                     const isExp = expandedMaterial === mat.id;
-                    const passRate = mat.inspectQty > 0 ? ((mat.passQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
-                    const failRate = mat.inspectQty > 0 ? ((mat.failQty / mat.inspectQty) * 100).toFixed(1) : "0.0";
+                    const passRate = calcQtyRatePercent(mat.passQty, mat.inspectQty, 1);
+                    const failRate = calcQtyRatePercent(mat.failQty, mat.inspectQty, 1);
                     
                     // Logic tính toán Nhãn trạng thái
                     const hasFail = mat.items?.some(it => it.status === CheckStatus.FAIL);

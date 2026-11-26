@@ -1120,19 +1120,41 @@ const importFileHelper = async (url: string, file: File): Promise<any> => {
   return response.json();
 };
 
-const exportFileHelper = async (url: string, filenamePrefix: string, format: string = 'xlsx'): Promise<void> => {
+export interface ExportFileResult {
+  filename: string;
+  rowCount?: number;
+  durationMs?: number;
+}
+
+const exportFileHelper = async (url: string, filenamePrefix: string, format: string = 'xlsx'): Promise<ExportFileResult> => {
   const response = await fetch(url, {
     headers: getAuthHeaders(),
   });
-  if (!response.ok) throw new Error('Export failed');
+  if (!response.ok) {
+    const errPayload = await response.json().catch(() => null);
+    throw new Error(errPayload?.error || `Xuất tệp thất bại (HTTP ${response.status})`);
+  }
+  const rowCountHeader = response.headers.get('X-Export-Row-Count');
+  const durationHeader = response.headers.get('X-Export-Duration-Ms');
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const matchName = disposition.match(/filename="?([^";]+)"?/i);
+  const filename = matchName?.[1] || `${filenamePrefix}_${Date.now()}.${format}`;
+
   const blob = await response.blob();
   const downloadUrl = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = downloadUrl;
-  a.download = `${filenamePrefix}_${Date.now()}.${format}`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
+  a.remove();
   window.URL.revokeObjectURL(downloadUrl);
+
+  return {
+    filename,
+    rowCount: rowCountHeader !== null ? Number(rowCountHeader) : undefined,
+    durationMs: durationHeader !== null ? Number(durationHeader) : undefined,
+  };
 };
 
 export const exportDefectLibrary = async (format: string = 'xlsx') => exportFileHelper(`/api/export/defects?format=${format}`, 'AATN_Defect_Library', format);
@@ -1147,8 +1169,14 @@ export const importMaterialsFile = async (file: File) => importFileHelper('/api/
 export const exportSuppliers = async (format: string = 'xlsx') => exportFileHelper(`/api/export/suppliers?format=${format}`, 'AATN_Suppliers', format);
 export const importSuppliersFile = async (file: File) => importFileHelper('/api/import/suppliers', file);
 
-export const exportInspections = async (filters: any = {}, format: string = 'csv') => {
-  const params = new URLSearchParams({ ...filters, format });
+export const exportInspections = async (filters: any = {}, format: string = 'csv'): Promise<ExportFileResult> => {
+  const params = new URLSearchParams();
+  Object.entries(filters || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && String(v).trim() !== '') {
+      params.set(k, String(v));
+    }
+  });
+  params.set('format', format);
   return exportFileHelper(`/api/export/inspections?${params.toString()}`, 'AATN_Inspections', format);
 };
 export const importInspectionsFile = async (file: File) => importFileHelper('/api/import/inspections', file);

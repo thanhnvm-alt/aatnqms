@@ -81,10 +81,17 @@ function renderInspectionStatusMeta(status: string): {
   icon: React.ReactNode;
 } {
   const st = String(status || '').toUpperCase();
-  if (['APPROVED', 'COMPLETED', 'VERIFIED', 'PASSED', 'PASS', 'LOCKED'].includes(st)) {
+  if (st === 'VERIFIED') {
+    return {
+      label: 'Đã duyệt L1',
+      textClass: 'text-cyan-600 dark:text-cyan-400',
+      icon: <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />,
+    };
+  }
+  if (['APPROVED', 'COMPLETED', 'PASSED', 'PASS', 'LOCKED'].includes(st)) {
     const labelMap: Record<string, string> = {
       LOCKED: 'Đã khóa ISO',
-      VERIFIED: 'Đã thẩm tra',
+      APPROVED: 'Đã duyệt L2',
       COMPLETED: 'Hoàn thành',
     };
     return {
