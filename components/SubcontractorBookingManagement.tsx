@@ -356,7 +356,7 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
       if (m03Caps.canCreate || m03Caps.canEditOwn || m03Caps.canEditAll) {
         await syncSuppliersFromBookingsApi().catch(() => {});
       }
-      const res = await fetchSuppliers('', 300);
+      const res = await fetchSuppliers('', 1, 300);
       const list = res.items || (res as any).suppliers || (Array.isArray(res) ? res : []);
       setSuppliers(list);
     } catch (e) {
@@ -375,9 +375,10 @@ export const SubcontractorBookingManagement: React.FC<Props> = ({ currentUser, r
 
     setSupplierStatus(prev => ({ ...prev, status: 'loading' }));
 
+    const normCleanName = cleanName.replace(/\s+/g, ' ').toLowerCase();
     // 1. Kiểm tra trong danh sách suppliers đã nạp sẵn
     let found = suppliers.find(s => 
-      s.name && s.name.trim().toLowerCase() === cleanName.toLowerCase()
+      s.name && s.name.trim().replace(/\s+/g, ' ').toLowerCase() === normCleanName
     );
 
     // 2. Nếu chưa có hoặc thiếu thông tin, gọi API findSupplierByName

@@ -27,6 +27,7 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
   const [searchInput, setSearchInput] = useState('');
 
   const handleCommitSearch = () => {
+    setPage(1);
     setSearchTerm(searchInput);
   };
 
@@ -153,8 +154,8 @@ export const SupplierManagement: React.FC<SupplierManagementProps> = ({ user, on
       await loadSuppliers(searchTerm, page, sortBy);
       setIsModalOpen(false);
       setToast({ message: 'Đã lưu thông tin nhà cung cấp', type: 'success' });
-    } catch (e) { 
-      setFormError("Lỗi khi lưu nhà cung cấp. Vui lòng thử lại."); 
+    } catch (e: any) { 
+      setFormError(e?.message || "Lỗi khi lưu nhà cung cấp. Vui lòng thử lại."); 
     } finally { 
       setIsSaving(false); 
     }

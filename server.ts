@@ -689,7 +689,9 @@ app.get('/api/suppliers', async (req, res) => {
   try {
     const search = String(req.query.search || '');
     const limit = parseInt(req.query.limit as string || '200', 10);
-    const result = await dbService.getSuppliers(search, limit);
+    const page = parseInt(req.query.page as string || '1', 10);
+    const sortBy = String(req.query.sortBy || 'name');
+    const result = await dbService.getSuppliers(search, limit, page, sortBy);
     res.json(result);
   } catch (err: any) {
     sendErr(res, err);

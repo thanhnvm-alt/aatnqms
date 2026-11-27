@@ -49,13 +49,16 @@ const MODULE_CONFIG: Record<string, { label: string }> = {
 };
 
 export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, users = [], workshops = [], filters, onLogout, onNavigate, onViewInspection, onFilterChange }) => {
+  const splitCsv = (val: any): string[] =>
+    val ? String(val).split(',').map((s) => s.trim()).filter((s) => s.length > 0 && s !== 'ALL') : [];
+
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [filterQC, setFilterQC] = useState<string[]>(() => filters?.qc ? filters.qc.split(',').filter(Boolean) : []);
-  const [filterWorkshop, setFilterWorkshop] = useState<string[]>(() => filters?.workshop ? filters.workshop.split(',').filter(Boolean) : []);
-  const [filterStatus, setFilterStatus] = useState<string[]>(() => filters?.status ? filters.status.split(',').filter(Boolean) : []);
-  const [filterType, setFilterType] = useState<string[]>(() => filters?.type ? filters.type.split(',').filter(Boolean) : []);
-  const [filterProject, setFilterProject] = useState<string[]>(() => filters?.project ? filters.project.split(',').filter(Boolean) : []);
-  const [filterStage, setFilterStage] = useState<string[]>(() => filters?.stage ? filters.stage.split(',').filter(Boolean) : (filters?.inspectionStage ? filters.inspectionStage.split(',').filter(Boolean) : []));
+  const [filterQC, setFilterQC] = useState<string[]>(() => splitCsv(filters?.qc));
+  const [filterWorkshop, setFilterWorkshop] = useState<string[]>(() => splitCsv(filters?.workshop));
+  const [filterStatus, setFilterStatus] = useState<string[]>(() => splitCsv(filters?.status));
+  const [filterType, setFilterType] = useState<string[]>(() => splitCsv(filters?.type));
+  const [filterProject, setFilterProject] = useState<string[]>(() => splitCsv(filters?.project));
+  const [filterStage, setFilterStage] = useState<string[]>(() => splitCsv(filters?.stage ?? filters?.inspectionStage));
   const [startDate, setStartDate] = useState(() => filters?.startDate || '');
   const [endDate, setEndDate] = useState(() => filters?.endDate || '');
   const [projectOptions, setProjectOptions] = useState<any[]>([]);
@@ -65,23 +68,46 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
   const [selectedNcrDateKey, setSelectedNcrDateKey] = useState<string | null>(null);
 
   useEffect(() => {
+    setFilterQC(splitCsv(filters?.qc));
+    setFilterWorkshop(splitCsv(filters?.workshop));
+    setFilterStatus(splitCsv(filters?.status));
+    setFilterType(splitCsv(filters?.type));
+    setFilterProject(splitCsv(filters?.project));
+    setFilterStage(splitCsv(filters?.stage ?? filters?.inspectionStage));
+    setStartDate(filters?.startDate || '');
+    setEndDate(filters?.endDate || '');
+    setSelectedNcrDateKey(null);
+  }, [filters]);
+
+  const emitFilterChange = (overrides: Record<string, any> = {}) => {
+    if (!onFilterChange) return;
+    const next = {
+      qc: (overrides.qc ?? filterQC).join(','),
+      workshop: (overrides.workshop ?? filterWorkshop).join(','),
+      status: (overrides.status ?? filterStatus).join(','),
+      type: (overrides.type ?? filterType).join(','),
+      project: (overrides.project ?? filterProject).join(','),
+      stage: (overrides.stage ?? filterStage).join(','),
+      startDate: overrides.startDate !== undefined ? overrides.startDate : startDate,
+      endDate: overrides.endDate !== undefined ? overrides.endDate : endDate,
+    };
+    onFilterChange(next);
+  };
+
+  useEffect(() => {
     let active = true;
     setIsLoadingNcrs(true);
-    
+
     const ncrFilters: any = {};
     if (filters?.qc && filters.qc !== 'ALL') ncrFilters.qc = filters.qc;
     if (filters?.workshop && filters.workshop !== 'ALL') ncrFilters.workshop = filters.workshop;
     if (filters?.project && filters.project !== 'ALL') ncrFilters.project = filters.project;
-    if (filters?.status && filters.status !== 'ALL') ncrFilters.status = filters.status;
-    if (filters?.startDate) {
-        const ts = Math.floor(new Date(filters.startDate).getTime() / 1000);
-        if (!isNaN(ts)) ncrFilters.unixStart = ts;
-    }
-    if (filters?.endDate) {
-        const ts = Math.floor(new Date(filters.endDate).getTime() / 1000) + 86399;
-        if (!isNaN(ts)) ncrFilters.unixEnd = ts;
-    }
-    
+    if (filters?.type && filters.type !== 'ALL') ncrFilters.type = filters.type;
+    if (filters?.stage && filters.stage !== 'ALL') ncrFilters.stage = filters.stage;
+    if (filters?.status && filters.status !== 'ALL') ncrFilters.inspectionStatus = filters.status;
+    if (filters?.startDate) ncrFilters.startDate = filters.startDate;
+    if (filters?.endDate) ncrFilters.endDate = filters.endDate;
+
     fetchNcrs(ncrFilters, 1, 1000)
       .then((res: any) => {
         if (active) {
@@ -97,68 +123,105 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
       .finally(() => {
         if (active) setIsLoadingNcrs(false);
       });
-      
+
     return () => { active = false; };
   }, [filters]);
 
+  const getNcrGmt7Ymd = (ncr: NCR): { year: number; month: number; day: number } | null => {
+    const rawDate = typeof ncr.createdDate === 'string' ? ncr.createdDate.trim() : '';
+    const isoMatch = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      return { year: Number(isoMatch[1]), month: Number(isoMatch[2]), day: Number(isoMatch[3]) };
+    }
+    const rawTs = ncr.created_at !== undefined && ncr.created_at !== null ? Number(ncr.created_at) : NaN;
+    let ms = NaN;
+    if (Number.isFinite(rawTs) && rawTs > 0) {
+      ms = rawTs > 1e12 ? rawTs : rawTs * 1000;
+    } else if (rawDate) {
+      ms = Date.parse(rawDate);
+    }
+    if (!Number.isFinite(ms)) return null;
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(new Date(ms));
+      const y = Number(parts.find((p) => p.type === 'year')?.value);
+      const m = Number(parts.find((p) => p.type === 'month')?.value);
+      const d = Number(parts.find((p) => p.type === 'day')?.value);
+      if (y && m && d) return { year: y, month: m, day: d };
+    } catch {
+      // fallback below
+    }
+    const dt = new Date(ms + 7 * 3600 * 1000);
+    return { year: dt.getUTCFullYear(), month: dt.getUTCMonth() + 1, day: dt.getUTCDate() };
+  };
+
+  const getNcrGroupBucket = (ncr: NCR, range: 'DAY'|'WEEK'|'MONTH'|'YEAR'): { key: string; label: string } | null => {
+    const ymd = getNcrGmt7Ymd(ncr);
+    if (!ymd) return null;
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    if (range === 'DAY') {
+      return {
+        key: `${ymd.year}-${pad2(ymd.month)}-${pad2(ymd.day)}`,
+        label: `${pad2(ymd.day)}/${pad2(ymd.month)}`,
+      };
+    }
+    if (range === 'WEEK') {
+      const utcDate = new Date(Date.UTC(ymd.year, ymd.month - 1, ymd.day));
+      const dayOfWeek = utcDate.getUTCDay();
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(utcDate.getTime() + diffToMonday * 86400000);
+      const wy = monday.getUTCFullYear();
+      const wm = monday.getUTCMonth() + 1;
+      const wd = monday.getUTCDate();
+      const weekNum = Math.ceil(wd / 7);
+      return {
+        key: `${wy}-${pad2(wm)}-${pad2(wd)}`,
+        label: `Tuần ${weekNum} (${pad2(wd)}/${pad2(wm)})`,
+      };
+    }
+    if (range === 'MONTH') {
+      return {
+        key: `${ymd.year}-${pad2(ymd.month)}`,
+        label: `T${ymd.month}/${ymd.year}`,
+      };
+    }
+    return {
+      key: `${ymd.year}`,
+      label: `Năm ${ymd.year}`,
+    };
+  };
+
   const ncrChartData = useMemo(() => {
-    const grouped: Record<string, { dateLabel: string; count: number, originalDate: Date }> = {};
-    
+    const grouped: Record<string, { dateLabel: string; count: number }> = {};
+
     ncrList.forEach(ncr => {
-        const d = ncr.createdDate ? new Date(ncr.createdDate) : new Date();
-        if (isNaN(d.getTime())) return;
-        
-        let key = '';
-        let label = '';
-        
-        if (ncrGroupRange === 'DAY') {
-            key = d.toISOString().split('T')[0];
-            label = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-        } else if (ncrGroupRange === 'WEEK') {
-            const firstDay = new Date(d.setDate(d.getDate() - d.getDay() + 1));
-            key = firstDay.toISOString().split('T')[0];
-            label = `Tuần ${Math.ceil((d.getDate() - 1 - d.getDay()) / 7) + 1} (${firstDay.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })})`;
-        } else if (ncrGroupRange === 'MONTH') {
-            key = `${d.getFullYear()}-${d.getMonth()+1}`;
-            label = `T${d.getMonth()+1}/${d.getFullYear()}`;
-        } else if (ncrGroupRange === 'YEAR') {
-            key = `${d.getFullYear()}`;
-            label = `Năm ${d.getFullYear()}`;
-        }
-        
-        if (!grouped[key]) {
-            grouped[key] = { dateLabel: label, count: 0, originalDate: d };
-        }
-        grouped[key].count += 1;
+      const bucket = getNcrGroupBucket(ncr, ncrGroupRange);
+      if (!bucket) return;
+      if (!grouped[bucket.key]) {
+        grouped[bucket.key] = { dateLabel: bucket.label, count: 0 };
+      }
+      grouped[bucket.key].count += 1;
     });
-    
+
     return Object.entries(grouped)
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([key, val]) => ({
-            key,
-            name: val.dateLabel,
-            count: val.count
-        }));
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, val]) => ({
+        key,
+        name: val.dateLabel,
+        count: val.count
+      }));
   }, [ncrList, ncrGroupRange]);
 
   const filteredNcrList = useMemo(() => {
-      if (!selectedNcrDateKey) return ncrList;
-      return ncrList.filter(ncr => {
-          const d = ncr.createdDate ? new Date(ncr.createdDate) : new Date();
-          if (isNaN(d.getTime())) return false;
-          let key = '';
-          if (ncrGroupRange === 'DAY') {
-              key = d.toISOString().split('T')[0];
-          } else if (ncrGroupRange === 'WEEK') {
-              const firstDay = new Date(d.setDate(d.getDate() - d.getDay() + 1));
-              key = firstDay.toISOString().split('T')[0];
-          } else if (ncrGroupRange === 'MONTH') {
-              key = `${d.getFullYear()}-${d.getMonth()+1}`;
-          } else if (ncrGroupRange === 'YEAR') {
-              key = `${d.getFullYear()}`;
-          }
-          return key === selectedNcrDateKey;
-      });
+    if (!selectedNcrDateKey) return ncrList;
+    return ncrList.filter(ncr => {
+      const bucket = getNcrGroupBucket(ncr, ncrGroupRange);
+      return bucket?.key === selectedNcrDateKey;
+    });
   }, [ncrList, selectedNcrDateKey, ncrGroupRange]);
 
   const filteredInspectionNcrList = useMemo(() => {
@@ -171,7 +234,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
                 ten_hang_muc: ncr.ten_hang_muc,
                 workshop: ncr.workshop,
                 createdDate: ncr.createdDate,
-                createdAt: ncr.createdDate,
+                createdAt: ncr.created_at || ncr.createdDate,
                 inspectorName: ncr.inspectorName,
                 ncrCount: 1,
             });
@@ -224,11 +287,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     });
 
     const workshopStages = workshops.flatMap(w => w.stages || []);
-    const allStages = Array.from(new Set([
-      ...workshopStages,
-      'P18 - sơn - vecni - PVD - UPH - Đan mây',
+    const stageDedupeMap = new Map<string, string>();
+    [
       'P18 - Sơn - Vecni - PVD - UPH - Đan Mây',
-    ].filter(Boolean))).sort() as string[];
+      ...workshopStages,
+    ]
+      .filter(Boolean)
+      .forEach((raw) => {
+        const clean = String(raw).trim();
+        const key = clean.toLowerCase();
+        if (!stageDedupeMap.has(key)) {
+          stageDedupeMap.set(key, clean);
+        }
+      });
+    const allStages = Array.from(stageDedupeMap.values()).sort((a, b) => a.localeCompare(b, 'vi'));
 
     return {
       inspectors: Array.from(new Set(user?.role === 'QC' ? [user.name] : (qaqcUsers.map(u => u.name) || []))),
@@ -245,21 +317,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
 
   const isFilterActive = filterQC.length > 0 || filterWorkshop.length > 0 || filterStatus.length > 0 || filterType.length > 0 || filterProject.length > 0 || filterStage.length > 0 || startDate !== '' || endDate !== '';
 
-  const handleApplyFilters = () => {
-    if (onFilterChange) {
-      onFilterChange({
-        qc: filterQC.join(','),
-        workshop: filterWorkshop.join(','),
-        status: filterStatus.join(','),
-        type: filterType.join(','),
-        project: filterProject.join(','),
-        stage: filterStage.join(','),
-        startDate,
-        endDate
-      });
-    }
-  };
-
   const clearFilters = () => {
     setFilterQC([]);
     setFilterWorkshop([]);
@@ -269,6 +326,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     setFilterStage([]);
     setStartDate('');
     setEndDate('');
+    setSelectedNcrDateKey(null);
     if (onFilterChange) onFilterChange({});
   };
 
@@ -286,7 +344,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
     const raw = dashboardStats?.stats;
     if (raw) {
       const avgSuccessRate = clampRate(toSafeNumber(raw.avgSuccessRate, 0));
-      const avgErrorRate = clampRate(toSafeNumber(raw.avgErrorRate, Number((100 - avgSuccessRate).toFixed(1))));
+      const avgErrorRate = clampRate(toSafeNumber(raw.avgErrorRate, 0));
       return {
         total: toSafeNumber(raw.total, 0),
         drafts: toSafeNumber(raw.drafts, 0),
@@ -314,7 +372,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
       const passed = toSafeNumber(m.passed, 0);
       const failed = toSafeNumber(m.failed, 0);
       const count = toSafeNumber(m.count, 0);
-      const fallbackScore = toSafeNumber(m.fallbackScore, count * 100);
+      const fallbackScore = toSafeNumber(m.fallbackScore, 0);
 
       let passRate = 0;
       let failRate = 0;
@@ -322,8 +380,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
       if (inspected > 0) {
         passRate = clampRate(Number(((passed / inspected) * 100).toFixed(1)));
         failRate = clampRate(Number(((failed / inspected) * 100).toFixed(1)));
-      } else if (count > 0) {
-        passRate = clampRate(Number(((fallbackScore / (count * 100)) * 100).toFixed(1)));
+      } else if (count > 0 && fallbackScore > 0) {
+        passRate = clampRate(Number((fallbackScore / count).toFixed(1)));
         failRate = clampRate(Number((100 - passRate).toFixed(1)));
       }
 
@@ -344,14 +402,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
       .map((item: any) => {
         const inspected = toSafeNumber(item.inspected, 0);
         const passed = toSafeNumber(item.passed, 0);
+        const failed = toSafeNumber(item.failed, 0);
         const count = toSafeNumber(item.count, 0);
-        const fallbackScore = toSafeNumber(item.fallbackScore, count * 100);
+        const fallbackScore = toSafeNumber(item.fallbackScore, 0);
 
         let passRate = 0;
+        let failRate = 0;
         if (inspected > 0) {
-          passRate = clampRate(parseFloat(((passed / inspected) * 100).toFixed(2)));
-        } else if (count > 0) {
-          passRate = clampRate(parseFloat((fallbackScore / count).toFixed(2)));
+          passRate = clampRate(parseFloat(((passed / inspected) * 100).toFixed(1)));
+          failRate = clampRate(parseFloat(((failed / inspected) * 100).toFixed(1)));
+        } else if (count > 0 && fallbackScore > 0) {
+          passRate = clampRate(parseFloat((fallbackScore / count).toFixed(1)));
+          failRate = clampRate(parseFloat((100 - passRate).toFixed(1)));
         }
 
         const code = String(item.code || 'XƯỞNG MẶC ĐỊNH');
@@ -362,7 +424,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
           code,
           name: displayName,
           passRate,
-          failRate: clampRate(parseFloat((100 - passRate).toFixed(2))),
+          failRate,
         };
       })
       .sort((a: any, b: any) => a.code.localeCompare(b.code, undefined, { numeric: true }))
@@ -372,7 +434,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
   const stageData = useMemo(() => {
     if (!Array.isArray(dashboardStats?.stageData)) return [];
 
-    const stageMap: Record<string, { inspected: number; passed: number; count: number }> = {};
+    const stageMap: Record<string, { inspected: number; passed: number; failed: number; count: number }> = {};
 
     dashboardStats.stageData.forEach((item: any) => {
       let stageName = String(item.stageName || '').trim();
@@ -380,30 +442,33 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
 
       const numericMatches = stageName.match(/\d+/);
       if (numericMatches) {
-        stageName = `P${numericMatches[0]}`;
+        stageName = `P${Number(numericMatches[0])}`;
       } else if (!stageName.startsWith('P')) {
         stageName = `P${stageName}`;
       }
 
-      if (!stageMap[stageName]) stageMap[stageName] = { inspected: 0, passed: 0, count: 0 };
+      if (!stageMap[stageName]) stageMap[stageName] = { inspected: 0, passed: 0, failed: 0, count: 0 };
 
       stageMap[stageName].inspected += toSafeNumber(item.inspected, 0);
       stageMap[stageName].passed += toSafeNumber(item.passed, 0);
+      stageMap[stageName].failed += toSafeNumber(item.failed, 0);
       stageMap[stageName].count += toSafeNumber(item.count, 0);
     });
 
     return Object.keys(stageMap)
       .map(key => {
         const item = stageMap[key];
-        let passRate = 100;
+        let passRate = 0;
+        let failRate = 0;
         if (item.inspected > 0) {
-          passRate = clampRate(parseFloat(((item.passed / item.inspected) * 100).toFixed(2)));
+          passRate = clampRate(parseFloat(((item.passed / item.inspected) * 100).toFixed(1)));
+          failRate = clampRate(parseFloat(((item.failed / item.inspected) * 100).toFixed(1)));
         }
 
         return {
           name: key,
           passRate,
-          failRate: clampRate(parseFloat((100 - passRate).toFixed(2))),
+          failRate,
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
@@ -458,41 +523,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ dashboardStats, user, user
                         label="Loại phiếu"
                         values={filterType}
                         options={filterOptions.types}
-                        onChange={(vals) => { setFilterType(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: vals.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterType(vals); emitFilterChange({ type: vals }); }}
                         optionLabels={Object.fromEntries(Object.entries(MODULE_CONFIG).map(([k, v]) => [k, v.label]))}
                     />
                     <SearchableSelect 
                         label="Dự án"
                         values={filterProject}
                         options={filterOptions.projects}
-                        onChange={(vals) => { setFilterProject(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: vals.join(','), stage: filterStage.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterProject(vals); emitFilterChange({ project: vals }); }}
                         optionLabels={projectLabels}
                     />
                     <SearchableSelect 
                         label="Xưởng Sản Xuất"
                         values={filterWorkshop}
                         options={filterOptions.workshops}
-                        onChange={(vals) => { setFilterWorkshop(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: vals.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterWorkshop(vals); emitFilterChange({ workshop: vals }); }}
                         optionLabels={workshopLabels}
                     />
                     <SearchableSelect 
                         label="Công đoạn kiểm tra"
                         values={filterStage}
                         options={filterOptions.stages}
-                        onChange={(vals) => { setFilterStage(vals); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: vals.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterStage(vals); emitFilterChange({ stage: vals }); }}
                     />
                     <SearchableSelect 
                         label="QC Kiểm tra"
                         values={filterQC}
                         options={filterOptions.inspectors}
-                        onChange={(vals) => { setFilterQC(vals); if (onFilterChange) onFilterChange({ qc: vals.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate, endDate }); }}
+                        onChange={(vals) => { setFilterQC(vals); emitFilterChange({ qc: vals }); }}
                     />
                     <DateRangePicker 
                         label="Khoảng ngày"
                         startDate={startDate}
                         endDate={endDate}
-                        onStartDateChange={(d) => { setStartDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate: d, endDate }); }}
-                        onEndDateChange={(d) => { setEndDate(d); if (onFilterChange) onFilterChange({ qc: filterQC.join(','), workshop: filterWorkshop.join(','), status: filterStatus.join(','), type: filterType.join(','), project: filterProject.join(','), stage: filterStage.join(','), startDate, endDate: d }); }}
+                        onStartDateChange={(d) => { setStartDate(d); emitFilterChange({ startDate: d }); }}
+                        onEndDateChange={(d) => { setEndDate(d); emitFilterChange({ endDate: d }); }}
+                        onRangeChange={(s, e) => { setStartDate(s); setEndDate(e); emitFilterChange({ startDate: s, endDate: e }); }}
                     />
                 </div>
             )}

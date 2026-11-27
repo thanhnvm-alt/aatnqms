@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { query } from '../lib/db.js';
+import { query, getPool } from '../lib/db.js';
 import { writeAuditLog } from './dbModuleService.js';
 import { assertNoNewBase64DataUri, stripTransientMediaUrlParams } from './storageService.js';
 import {
@@ -1210,6 +1210,7 @@ export async function manualOverrideSubcontractorBookingStatus(
 
 // [Update - Danh Sách Phiếu] - [v3.1.0] - Khôi phục đầy đủ bộ lọc server, API cây ngày tháng & danh sách dự án theo múi giờ GMT+7
 const EFFECTIVE_INSPECTION_TS_EXPR = `COALESCE(NULLIF(date, 0), created_at)`;
+const EFFECTIVE_INSPECTION_TS_SEC_EXPR = `CASE WHEN ${EFFECTIVE_INSPECTION_TS_EXPR} > 1000000000000 THEN (${EFFECTIVE_INSPECTION_TS_EXPR} / 1000) ELSE ${EFFECTIVE_INSPECTION_TS_EXPR} END`;
 
 function parseBoundTimestamp(val: any, isEnd: boolean): number | null {
   if (val === undefined || val === null || val === '') return null;
@@ -1243,7 +1244,7 @@ function buildInspectionsWhereClause(
   options: { includeProject?: boolean; includeDateBounds?: boolean } = {}
 ): { whereSql: string; params: any[] } {
   const { includeProject = true, includeDateBounds = true } = options;
-  const clauses: string[] = ['1=1'];
+  const clauses: string[] = ['deleted_at IS NULL'];
   const params: any[] = [];
   let idx = 1;
 
@@ -1263,37 +1264,38 @@ function buildInspectionsWhereClause(
     idx++;
   }
 
-  const types = splitCsvParam(filters.type);
+  const types = splitCsvParam(filters.type).map((t) => t.toUpperCase());
   if (types.length > 0) {
     const expandedTypes = new Set<string>(types);
     if (expandedTypes.has('SQC_MAT')) expandedTypes.add('SQC_VT');
-    clauses.push(`type = ANY($${idx++})`);
+    if (expandedTypes.has('SQC_VT')) expandedTypes.add('SQC_MAT');
+    clauses.push(`UPPER(TRIM(COALESCE(type, ''))) = ANY($${idx++})`);
     params.push(Array.from(expandedTypes));
   }
 
   const statuses = splitCsvParam(filters.status);
   if (statuses.length > 0) {
-    clauses.push(`LOWER(status) = ANY($${idx++})`);
+    clauses.push(`LOWER(TRIM(COALESCE(status, ''))) = ANY($${idx++})`);
     params.push(statuses.map((s) => s.toLowerCase()));
   } else {
     clauses.push(`COALESCE(UPPER(status), '') <> 'DELETED'`);
   }
 
-  const qcs = splitCsvParam(filters.qc);
+  const qcs = splitCsvParam(filters.qc).map((q) => q.toLowerCase());
   if (qcs.length > 0) {
-    clauses.push(`created_by = ANY($${idx++})`);
+    clauses.push(`LOWER(TRIM(COALESCE(created_by, ''))) = ANY($${idx++})`);
     params.push(qcs);
   }
 
-  const workshops = splitCsvParam(filters.workshop);
+  const workshops = splitCsvParam(filters.workshop).map((w) => w.toLowerCase());
   if (workshops.length > 0) {
-    clauses.push(`workshop = ANY($${idx++})`);
+    clauses.push(`LOWER(TRIM(COALESCE(workshop, ''))) = ANY($${idx++})`);
     params.push(workshops);
   }
 
-  const stages = splitCsvParam(filters.stage);
+  const stages = splitCsvParam(filters.stage).map((s) => s.toLowerCase());
   if (stages.length > 0) {
-    clauses.push(`stage = ANY($${idx++})`);
+    clauses.push(`LOWER(TRIM(COALESCE(stage, ''))) = ANY($${idx++})`);
     params.push(stages);
   }
 
@@ -1325,11 +1327,11 @@ function buildInspectionsWhereClause(
     const startTs = parseBoundTimestamp(filters.unixStart ?? filters.startDate, false);
     const endTs = parseBoundTimestamp(filters.unixEnd ?? filters.endDate, true);
     if (startTs !== null) {
-      clauses.push(`${EFFECTIVE_INSPECTION_TS_EXPR} >= $${idx++}`);
+      clauses.push(`${EFFECTIVE_INSPECTION_TS_SEC_EXPR} >= $${idx++}`);
       params.push(startTs);
     }
     if (endTs !== null) {
-      clauses.push(`${EFFECTIVE_INSPECTION_TS_EXPR} <= $${idx++}`);
+      clauses.push(`${EFFECTIVE_INSPECTION_TS_SEC_EXPR} <= $${idx++}`);
       params.push(endTs);
     }
   }
@@ -3600,29 +3602,17 @@ export async function getSubcontractorReinspectionCosts(): Promise<{ costs: Subc
 }
 
 // --- SUPPLIER MANAGEMENT (bảng suppliers) ---
+const SUPPLIER_NORM_NAME_SQL = `LOWER(TRIM(REGEXP_REPLACE(COALESCE("name", ''), '[[:space:]]+', ' ', 'g')))`;
 
-export async function findSupplierByNameOrCode(nameOrCode: string): Promise<Supplier | null> {
-  if (!nameOrCode || !nameOrCode.trim()) return null;
-  const clean = nameOrCode.trim();
-  const searchPattern = `%${clean}%`;
-  
-  const res = await query(`
-    SELECT id, code, name, address, contact_person, phone, email, category, status, version, updated_at
-    FROM ${SCHEMA}.suppliers 
-    WHERE deleted_at IS NULL 
-      AND (
-        LOWER(TRIM(name)) = LOWER(TRIM($1))
-        OR LOWER(TRIM(code)) = LOWER(TRIM($1))
-        OR name ILIKE $2
-      )
-    ORDER BY 
-      CASE WHEN LOWER(TRIM(name)) = LOWER(TRIM($1)) THEN 1 ELSE 2 END,
-      updated_at DESC NULLS LAST
-    LIMIT 1
-  `, [clean, searchPattern]);
+export function normalizeSupplierName(name?: string | null): string {
+  return String(name ?? '').trim().replace(/\s+/g, ' ');
+}
 
-  if (res.rows.length === 0) return null;
-  const row = res.rows[0];
+export function normalizeSupplierKey(name?: string | null): string {
+  return normalizeSupplierName(name).toLowerCase();
+}
+
+function mapSupplierRow(row: any): Supplier {
   return {
     id: row.id,
     code: row.code || '',
@@ -3634,171 +3624,357 @@ export async function findSupplierByNameOrCode(nameOrCode: string): Promise<Supp
     category: row.category || 'Gia công ngoài',
     status: row.status || 'ACTIVE',
     version: row.version !== undefined && row.version !== null ? Number(row.version) : 1,
-    updated_at: row.updated_at ? parseInt(row.updated_at) : undefined
+    updated_at: row.updated_at ? parseInt(row.updated_at, 10) : undefined
   };
 }
 
-export async function getSuppliers(search: string = '', limit: number = 200): Promise<{ items: Supplier[], total: number }> {
-  let sql = `SELECT id, code, name, address, contact_person, phone, email, category, status, version, updated_at FROM ${SCHEMA}.suppliers WHERE deleted_at IS NULL`;
+export async function findSupplierByNameOrCode(nameOrCode: string): Promise<Supplier | null> {
+  const clean = normalizeSupplierName(nameOrCode);
+  if (!clean) return null;
+  const cleanKey = clean.toLowerCase();
+  const searchPattern = `%${clean}%`;
+
+  const res = await query(`
+    SELECT id, code, name, address, contact_person, phone, email, category, status, version, updated_at
+    FROM ${SCHEMA}.suppliers
+    WHERE deleted_at IS NULL
+      AND (
+        ${SUPPLIER_NORM_NAME_SQL} = $1
+        OR LOWER(TRIM(COALESCE(code, ''))) = $1
+        OR REGEXP_REPLACE(COALESCE(name, ''), '[[:space:]]+', ' ', 'g') ILIKE $2
+      )
+    ORDER BY
+      CASE
+        WHEN ${SUPPLIER_NORM_NAME_SQL} = $1 THEN 1
+        WHEN LOWER(TRIM(COALESCE(code, ''))) = $1 THEN 2
+        ELSE 3
+      END,
+      updated_at DESC NULLS LAST
+    LIMIT 1
+  `, [cleanKey, searchPattern]);
+
+  if (res.rows.length === 0) return null;
+  return mapSupplierRow(res.rows[0]);
+}
+
+export async function getSuppliers(
+  search: string = '',
+  limit: number = 200,
+  page: number = 1,
+  sortBy: string = 'name'
+): Promise<{ items: Supplier[], total: number }> {
+  const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 10000);
+  const safePage = Math.max(Number(page) || 1, 1);
+  const offset = (safePage - 1) * safeLimit;
+
+  const whereParts: string[] = ['deleted_at IS NULL'];
   const params: any[] = [];
   let idx = 1;
 
   if (search && search.trim()) {
-    sql += ` AND (name ILIKE $${idx} OR code ILIKE $${idx} OR contact_person ILIKE $${idx} OR phone ILIKE $${idx})`;
-    params.push(`%${search.trim()}%`);
+    const cleanSearch = normalizeSupplierName(search);
+    whereParts.push(`(REGEXP_REPLACE(COALESCE(name, ''), '[[:space:]]+', ' ', 'g') ILIKE $${idx} OR code ILIKE $${idx} OR contact_person ILIKE $${idx} OR phone ILIKE $${idx} OR category ILIKE $${idx})`);
+    params.push(`%${cleanSearch}%`);
     idx++;
   }
 
-  sql += ` ORDER BY name ASC LIMIT $${idx++}`;
-  params.push(limit);
+  const whereSql = whereParts.join(' AND ');
+  const countRes = await query(
+    `SELECT COUNT(*)::int AS total FROM ${SCHEMA}.suppliers WHERE ${whereSql}`,
+    params
+  );
+  const total = Number(countRes.rows[0]?.total || 0);
 
-  const res = await query(sql, params);
-  const items = res.rows.map((row: any): Supplier => ({
-    id: row.id,
-    code: row.code || '',
-    name: row.name || '',
-    address: row.address || '',
-    contact_person: row.contact_person || '',
-    phone: row.phone || '',
-    email: row.email || '',
-    category: row.category || 'Gia công ngoài',
-    status: row.status || 'ACTIVE',
-    version: row.version !== undefined && row.version !== null ? Number(row.version) : 1,
-    updated_at: row.updated_at ? parseInt(row.updated_at) : undefined
-  }));
+  const orderSql =
+    sortBy === 'updated_at'
+      ? 'ORDER BY updated_at DESC NULLS LAST, name ASC'
+      : 'ORDER BY name ASC';
 
-  return { items, total: items.length };
+  const listSql = `
+    SELECT id, code, name, address, contact_person, phone, email, category, status, version, updated_at
+    FROM ${SCHEMA}.suppliers
+    WHERE ${whereSql}
+    ${orderSql}
+    LIMIT $${idx++} OFFSET $${idx++}
+  `;
+
+  const res = await query(listSql, [...params, safeLimit, offset]);
+  const items = res.rows.map(mapSupplierRow);
+
+  return { items, total };
 }
 
-export async function upsertSupplier(data: {
-  id?: string;
-  code?: string;
-  name: string;
-  address?: string;
-  contact_person?: string;
-  phone?: string;
-  email?: string;
-  category?: string;
-  version?: number;
-}, actorId?: string | null): Promise<Supplier> {
-  const cleanName = (data.name || '').trim();
+export interface UpsertSupplierOptions {
+  preferExistingIfNewer?: boolean;
+  sourceUpdatedAt?: number;
+}
+
+export async function upsertSupplier(
+  data: {
+    id?: string;
+    code?: string;
+    name: string;
+    address?: string;
+    contact_person?: string;
+    phone?: string;
+    email?: string;
+    category?: string;
+    status?: string;
+    version?: number;
+  },
+  actorId?: string | null,
+  options?: UpsertSupplierOptions
+): Promise<Supplier> {
+  const cleanName = normalizeSupplierName(data.name);
   if (!cleanName) {
     throw new Error('Tên nhà cung cấp không được để trống');
   }
+  const normKey = cleanName.toLowerCase();
 
-  // Check if supplier already exists by name or id
-  const existingRes = await query(`
-    SELECT id, code, name, address, contact_person, phone, email, category, status, version, updated_at
-    FROM ${SCHEMA}.suppliers 
-    WHERE deleted_at IS NULL 
-      AND (
-        LOWER(TRIM(name)) = LOWER(TRIM($1))
-        OR (id = $2 AND $2 IS NOT NULL AND $2 != '')
-      )
-    LIMIT 1
-  `, [cleanName, data.id || '']);
-
-  const nowTs = Math.floor(Date.now() / 1000);
-  const existing = existingRes.rows[0] || null;
   data = stripTransientMediaUrlParams(data);
-  assertNoNewBase64DataUri(data, existing, 'Nhà cung cấp');
 
-  if (existing) {
-    if (
-      data.version !== undefined &&
-      existing.version !== undefined &&
-      Number(data.version) !== Number(existing.version)
-    ) {
+  const pool = await getPool();
+  const client = await pool.connect();
+  let committed = false;
+  let auditEntry: {
+    action: 'CREATE_SUPPLIER' | 'UPDATE_SUPPLIER';
+    entityId: string;
+    oldValue?: any;
+    newValue: any;
+  } | null = null;
+  let resultSupplier: Supplier;
+
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`supplier:${normKey}`]);
+
+    const byNameRes = await client.query(
+      `SELECT id, code, name, address, contact_person, phone, email, category, status, version, updated_at
+       FROM ${SCHEMA}.suppliers
+       WHERE deleted_at IS NULL
+         AND ${SUPPLIER_NORM_NAME_SQL} = $1
+       ORDER BY COALESCE(updated_at, 0) DESC, id DESC
+       LIMIT 1`,
+      [normKey]
+    );
+    const existingByName = byNameRes.rows[0] || null;
+
+    const cleanId = String(data.id || '').trim();
+    let existingById: any = null;
+    if (cleanId) {
+      const byIdRes = await client.query(
+        `SELECT id, code, name, address, contact_person, phone, email, category, status, version, updated_at
+         FROM ${SCHEMA}.suppliers
+         WHERE deleted_at IS NULL
+           AND id = $1
+         LIMIT 1`,
+        [cleanId]
+      );
+      existingById = byIdRes.rows[0] || null;
+    }
+
+    if (existingById && existingByName && existingById.id !== existingByName.id) {
       throw Object.assign(
-        new Error('Thông tin nhà cung cấp đã được người khác cập nhật trước đó. Vui lòng tải lại.'),
+        new Error(`Tên nhà cung cấp "${cleanName}" đã tồn tại ở hồ sơ #${existingByName.code || existingByName.id}.`),
         { statusCode: 409 }
       );
     }
 
-    const updateRes = await query(`
-      UPDATE ${SCHEMA}.suppliers 
-      SET 
-        address = COALESCE($1, address),
-        contact_person = COALESCE($2, contact_person),
-        phone = COALESCE($3, phone),
-        email = COALESCE($4, email),
-        category = COALESCE($5, category),
-        version = COALESCE(version, 1) + 1,
-        updated_at = $6
-      WHERE id = $7
-      RETURNING *
-    `, [
-      data.address !== undefined ? data.address : existing.address,
-      data.contact_person !== undefined ? data.contact_person : existing.contact_person,
-      data.phone !== undefined ? data.phone : existing.phone,
-      data.email !== undefined ? data.email : existing.email,
-      data.category !== undefined ? data.category : existing.category,
-      nowTs,
-      existing.id
-    ]);
-    const r = updateRes.rows[0];
-    await writeAuditLog({
-      userId: actorId || null,
-      action: 'UPDATE_SUPPLIER',
-      entityType: 'supplier',
-      entityId: existing.id,
-      oldValue: existing,
-      newValue: r,
-    });
-    return {
-      id: r.id,
-      code: r.code || '',
-      name: r.name,
-      address: r.address || '',
-      contact_person: r.contact_person || '',
-      phone: r.phone || '',
-      email: r.email || '',
-      category: r.category || 'Gia công ngoài',
-      status: r.status || 'ACTIVE',
-      version: Number(r.version || 1),
-      updated_at: parseInt(r.updated_at || '0')
-    };
-  } else {
-    const newId = data.id || crypto.randomUUID();
-    const newCode = data.code || `NCC-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`;
-    const insertRes = await query(`
-      INSERT INTO ${SCHEMA}.suppliers (
-        id, code, name, address, contact_person, phone, email, category, status, updated_at, version
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ACTIVE', $9, 1)
-      RETURNING *
-    `, [
-      newId,
-      newCode,
-      cleanName,
-      data.address || '',
-      data.contact_person || '',
-      data.phone || '',
-      data.email || '',
-      data.category || 'Gia công ngoài',
-      nowTs
-    ]);
-    const r = insertRes.rows[0];
-    await writeAuditLog({
-      userId: actorId || null,
-      action: 'CREATE_SUPPLIER',
-      entityType: 'supplier',
-      entityId: newId,
-      newValue: r,
-    });
-    return {
-      id: r.id,
-      code: r.code || '',
-      name: r.name,
-      address: r.address || '',
-      contact_person: r.contact_person || '',
-      phone: r.phone || '',
-      email: r.email || '',
-      category: r.category || 'Gia công ngoài',
-      status: r.status || 'ACTIVE',
-      version: Number(r.version || 1),
-      updated_at: parseInt(r.updated_at || '0')
-    };
+    const existing = existingById || existingByName || null;
+    const isExplicitIdEdit = Boolean(existingById);
+
+    assertNoNewBase64DataUri(data, existing, 'Nhà cung cấp');
+
+    const nowTs = Math.floor(Date.now() / 1000);
+
+    if (existing) {
+      if (
+        isExplicitIdEdit &&
+        data.version !== undefined &&
+        existing.version !== undefined &&
+        Number(data.version) !== Number(existing.version)
+      ) {
+        throw Object.assign(
+          new Error('Thông tin nhà cung cấp đã được người khác cập nhật trước đó. Vui lòng tải lại.'),
+          { statusCode: 409 }
+        );
+      }
+
+      const existingUpdatedAt = Number(existing.updated_at || 0);
+      const sourceUpdatedAt = Number(options?.sourceUpdatedAt || 0);
+      const canOverwriteNonEmpty = !options?.preferExistingIfNewer || sourceUpdatedAt > existingUpdatedAt;
+
+      const mergeField = (incoming: any, current: any, fallback = ''): string => {
+        const curStr = String(current ?? '').trim();
+        if (incoming === undefined || incoming === null) {
+          return curStr || fallback;
+        }
+        const incStr = String(incoming).trim();
+        if (isExplicitIdEdit) {
+          return incStr || (fallback && !curStr ? fallback : '');
+        }
+        if (!incStr) {
+          return curStr || fallback;
+        }
+        if (!curStr) {
+          return incStr;
+        }
+        return canOverwriteNonEmpty ? incStr : curStr;
+      };
+
+      const existingCleanName = normalizeSupplierName(existing.name);
+      const nextName = isExplicitIdEdit
+        ? cleanName
+        : existingCleanName || cleanName;
+      const incomingCode = String(data.code ?? '').trim().toUpperCase();
+      const existingCode = String(existing.code ?? '').trim();
+      const nextCode = isExplicitIdEdit && incomingCode
+        ? incomingCode
+        : existingCode || incomingCode;
+
+      const nextAddress = mergeField(data.address, existing.address, '');
+      const nextContact = mergeField(data.contact_person, existing.contact_person, '');
+      const nextPhone = mergeField(data.phone, existing.phone, '');
+      const nextEmail = mergeField(data.email, existing.email, '');
+      const nextCategory = mergeField(data.category, existing.category, 'Gia công ngoài') || 'Gia công ngoài';
+      const nextStatus = mergeField(data.status, existing.status, 'ACTIVE') || 'ACTIVE';
+
+      const hasChanges =
+        nextName !== String(existing.name ?? '') ||
+        nextCode !== String(existing.code ?? '') ||
+        nextAddress !== String(existing.address ?? '') ||
+        nextContact !== String(existing.contact_person ?? '') ||
+        nextPhone !== String(existing.phone ?? '') ||
+        nextEmail !== String(existing.email ?? '') ||
+        nextCategory !== String(existing.category ?? '') ||
+        nextStatus !== String(existing.status ?? '');
+
+      if (!hasChanges) {
+        await client.query('COMMIT');
+        committed = true;
+        return mapSupplierRow(existing);
+      }
+
+      const updateRes = await client.query(
+        `UPDATE ${SCHEMA}.suppliers
+         SET
+           code = $1,
+           name = $2,
+           address = $3,
+           contact_person = $4,
+           phone = $5,
+           email = $6,
+           category = $7,
+           status = $8,
+           version = COALESCE(version, 1) + 1,
+           updated_at = $9
+         WHERE id = $10
+         RETURNING *`,
+        [
+          nextCode,
+          nextName,
+          nextAddress,
+          nextContact,
+          nextPhone,
+          nextEmail,
+          nextCategory,
+          nextStatus,
+          nowTs,
+          existing.id,
+        ]
+      );
+
+      const updatedRow = updateRes.rows[0];
+      await client.query('COMMIT');
+      committed = true;
+      resultSupplier = mapSupplierRow(updatedRow);
+      auditEntry = {
+        action: 'UPDATE_SUPPLIER',
+        entityId: existing.id,
+        oldValue: existing,
+        newValue: updatedRow,
+      };
+    } else {
+      const newId = cleanId || crypto.randomUUID();
+      const rawCode = String(data.code ?? '').trim().toUpperCase();
+      const autoCode = () => `NCC-${Date.now().toString().slice(-4)}${Math.floor(10 + Math.random() * 89)}`;
+      let newCode = rawCode || autoCode();
+
+      let insertedRow: any = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const insertRes = await client.query(
+            `INSERT INTO ${SCHEMA}.suppliers (
+               id, code, name, address, contact_person, phone, email, category, status, updated_at, version
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 1)
+             RETURNING *`,
+            [
+              newId,
+              newCode,
+              cleanName,
+              String(data.address ?? '').trim(),
+              String(data.contact_person ?? '').trim(),
+              String(data.phone ?? '').trim(),
+              String(data.email ?? '').trim(),
+              String(data.category ?? '').trim() || 'Gia công ngoài',
+              String(data.status ?? '').trim() || 'ACTIVE',
+              nowTs,
+            ]
+          );
+          insertedRow = insertRes.rows[0];
+          break;
+        } catch (insertErr: any) {
+          if (insertErr?.code === '23505') {
+            const constraintName = String(insertErr?.constraint || '');
+            if (!rawCode && constraintName.includes('code') && attempt === 0) {
+              newCode = autoCode();
+              continue;
+            }
+            if (constraintName.includes('code')) {
+              throw Object.assign(
+                new Error(`Mã nhà cung cấp "${newCode}" đã tồn tại trong hệ thống.`),
+                { statusCode: 409 }
+              );
+            }
+            throw Object.assign(
+              new Error(`Nhà cung cấp "${cleanName}" đã tồn tại trong hệ thống.`),
+              { statusCode: 409 }
+            );
+          }
+          throw insertErr;
+        }
+      }
+
+      await client.query('COMMIT');
+      committed = true;
+      resultSupplier = mapSupplierRow(insertedRow);
+      auditEntry = {
+        action: 'CREATE_SUPPLIER',
+        entityId: insertedRow.id,
+        newValue: insertedRow,
+      };
+    }
+  } catch (err) {
+    if (!committed) {
+      await client.query('ROLLBACK').catch(() => {});
+    }
+    throw err;
+  } finally {
+    client.release();
   }
+
+  if (auditEntry) {
+    await writeAuditLog({
+      userId: actorId || null,
+      action: auditEntry.action,
+      entityType: 'supplier',
+      entityId: auditEntry.entityId,
+      oldValue: auditEntry.oldValue,
+      newValue: auditEntry.newValue,
+    });
+  }
+
+  return resultSupplier;
 }
 
 // --- PO / PR & MATERIAL AUTO-LOOKUP (Read-only tables: material & ipo) ---
@@ -3859,7 +4035,7 @@ export async function lookupPoMaterials(
           COALESCE(s."phone", '') as "supplierPhone"
         FROM ${SCHEMA}.material m
         LEFT JOIN ${SCHEMA}.suppliers s
-          ON LOWER(TRIM(m."supplierName")) = LOWER(TRIM(s."name"))
+          ON LOWER(TRIM(REGEXP_REPLACE(COALESCE(m."supplierName", ''), '[[:space:]]+', ' ', 'g'))) = ${SUPPLIER_NORM_NAME_SQL.replace('"name"', 's."name"')}
           AND s.deleted_at IS NULL
         WHERE LOWER(TRIM(COALESCE(m."purchaseDocument"::text, ''))) = $1
            OR LOWER(TRIM(COALESCE(m."order"::text, ''))) = $1
@@ -3900,7 +4076,7 @@ export async function lookupPoMaterials(
           COALESCE(s."phone", '') as "supplierPhone"
         FROM ${SCHEMA}.material m
         LEFT JOIN ${SCHEMA}.suppliers s
-          ON LOWER(TRIM(m."supplierName")) = LOWER(TRIM(s."name"))
+          ON LOWER(TRIM(REGEXP_REPLACE(COALESCE(m."supplierName", ''), '[[:space:]]+', ' ', 'g'))) = ${SUPPLIER_NORM_NAME_SQL.replace('"name"', 's."name"')}
           AND s.deleted_at IS NULL
         WHERE COALESCE(m."purchaseDocument"::text, '') ILIKE $1
            OR COALESCE(m."order"::text, '') ILIKE $1
@@ -4243,7 +4419,7 @@ export async function getDashboardStats(filters: any = {}) {
       includeProject: true,
       includeDateBounds: true,
     });
-    const tsNormalizedExpr = `CASE WHEN ${EFFECTIVE_INSPECTION_TS_EXPR} > 1000000000000 THEN (${EFFECTIVE_INSPECTION_TS_EXPR} / 1000) ELSE ${EFFECTIVE_INSPECTION_TS_EXPR} END`;
+    const tsNormalizedExpr = EFFECTIVE_INSPECTION_TS_SEC_EXPR;
 
     const statsRes = await query(`
       SELECT 
@@ -4251,7 +4427,10 @@ export async function getDashboardStats(filters: any = {}) {
         COUNT(CASE WHEN UPPER(COALESCE(status, '')) = 'DRAFT' THEN 1 END)::int as drafts,
         COUNT(CASE WHEN UPPER(COALESCE(status, '')) IN ('FLAGGED', 'HIGH', 'CRITICAL', 'REJECTED') THEN 1 END)::int as high_priority,
         COUNT(CASE WHEN UPPER(COALESCE(status, '')) NOT IN ('DRAFT') THEN 1 END)::int as non_draft_count,
-        COALESCE(AVG(CASE WHEN score IS NOT NULL AND score > 0 THEN score END), 95.5) as avg_score
+        COALESCE(SUM(COALESCE(inspected_qty, 0)), 0)::float8 as total_inspected,
+        COALESCE(SUM(COALESCE(passed_qty, 0)), 0)::float8 as total_passed,
+        COALESCE(SUM(COALESCE(failed_qty, 0)), 0)::float8 as total_failed,
+        AVG(CASE WHEN score IS NOT NULL AND score > 0 THEN score END)::float8 as avg_score
       FROM ${SCHEMA}.inspections
       ${whereSql}
     `, params);
@@ -4261,21 +4440,32 @@ export async function getDashboardStats(filters: any = {}) {
     const drafts = parseInt(row.drafts || '0', 10) || 0;
     const highPriority = parseInt(row.high_priority || '0', 10) || 0;
     const nonDraftCount = parseInt(row.non_draft_count || '0', 10) || 0;
-    const rawAvgScore = parseFloat(row.avg_score || '95.5');
-    const avgSuccessRate = Number.isFinite(rawAvgScore) ? rawAvgScore : 95.5;
-    const avgErrorRate = Number.isFinite(100 - avgSuccessRate)
-      ? parseFloat(Math.max(0, 100 - avgSuccessRate).toFixed(1))
-      : 0;
+    const totalInspected = Number(row.total_inspected) || 0;
+    const totalPassed = Number(row.total_passed) || 0;
+    const totalFailed = Number(row.total_failed) || 0;
+    const rawAvgScore = row.avg_score !== null && row.avg_score !== undefined ? Number(row.avg_score) : NaN;
+
+    let avgSuccessRate = 0;
+    let avgErrorRate = 0;
+    if (total > 0) {
+      if (totalInspected > 0) {
+        avgSuccessRate = Math.min(100, Math.max(0, Number(((totalPassed / totalInspected) * 100).toFixed(1))));
+        avgErrorRate = Math.min(100, Math.max(0, Number(((totalFailed / totalInspected) * 100).toFixed(1))));
+      } else if (Number.isFinite(rawAvgScore) && rawAvgScore > 0) {
+        avgSuccessRate = Math.min(100, Math.max(0, Number(rawAvgScore.toFixed(1))));
+        avgErrorRate = Math.min(100, Math.max(0, Number((100 - avgSuccessRate).toFixed(1))));
+      }
+    }
 
     const monthlyRes = await query(`
       SELECT 
         TO_CHAR(TO_TIMESTAMP(${tsNormalizedExpr}) AT TIME ZONE 'Asia/Ho_Chi_Minh', 'TMMonth') as month_name,
         TO_CHAR(TO_TIMESTAMP(${tsNormalizedExpr}) AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM') as month_key,
         COUNT(*)::int as count,
-        COALESCE(SUM(inspected_qty), 0)::int as inspected,
-        COALESCE(SUM(passed_qty), 0)::int as passed,
-        COALESCE(SUM(failed_qty), 0)::int as failed,
-        COALESCE(SUM(CASE WHEN score IS NOT NULL AND score > 0 THEN score ELSE 100 END), 0)::float as fallback_score
+        COALESCE(SUM(COALESCE(inspected_qty, 0)), 0)::float8 as inspected,
+        COALESCE(SUM(COALESCE(passed_qty, 0)), 0)::float8 as passed,
+        COALESCE(SUM(COALESCE(failed_qty, 0)), 0)::float8 as failed,
+        COALESCE(SUM(CASE WHEN score IS NOT NULL AND score > 0 THEN score ELSE 0 END), 0)::float8 as fallback_score
       FROM ${SCHEMA}.inspections
       ${whereSql}
         AND ${EFFECTIVE_INSPECTION_TS_EXPR} IS NOT NULL
@@ -4290,11 +4480,11 @@ export async function getDashboardStats(filters: any = {}) {
       const fb = Number(r.fallback_score);
       return {
         month: r.month_name || r.month_key || '—',
-        inspected: parseInt(r.inspected || '0', 10) || 0,
-        passed: parseInt(r.passed || '0', 10) || 0,
-        failed: parseInt(r.failed || '0', 10) || 0,
+        inspected: Number(r.inspected) || 0,
+        passed: Number(r.passed) || 0,
+        failed: Number(r.failed) || 0,
         count: cnt,
-        fallbackScore: Number.isFinite(fb) ? fb : cnt * 100,
+        fallbackScore: Number.isFinite(fb) ? fb : 0,
       };
     }).reverse();
 
@@ -4302,9 +4492,10 @@ export async function getDashboardStats(filters: any = {}) {
       SELECT 
         COALESCE(NULLIF(TRIM(workshop), ''), 'XƯỞNG MẶC ĐỊNH') as code,
         COUNT(*)::int as count,
-        COALESCE(SUM(inspected_qty), 0)::int as inspected,
-        COALESCE(SUM(passed_qty), 0)::int as passed,
-        COALESCE(SUM(CASE WHEN score IS NOT NULL AND score > 0 THEN score ELSE 100 END), 0)::float as fallback_score
+        COALESCE(SUM(COALESCE(inspected_qty, 0)), 0)::float8 as inspected,
+        COALESCE(SUM(COALESCE(passed_qty, 0)), 0)::float8 as passed,
+        COALESCE(SUM(COALESCE(failed_qty, 0)), 0)::float8 as failed,
+        COALESCE(SUM(CASE WHEN score IS NOT NULL AND score > 0 THEN score ELSE 0 END), 0)::float8 as fallback_score
       FROM ${SCHEMA}.inspections
       ${whereSql}
       GROUP BY COALESCE(NULLIF(TRIM(workshop), ''), 'XƯỞNG MẶC ĐỊNH')
@@ -4318,30 +4509,35 @@ export async function getDashboardStats(filters: any = {}) {
       return {
         code: r.code || 'XƯỞNG MẶC ĐỊNH',
         count: cnt,
-        inspected: parseInt(r.inspected || '0', 10) || 0,
-        passed: parseInt(r.passed || '0', 10) || 0,
-        fallbackScore: Number.isFinite(fb) ? fb : cnt * 100,
+        inspected: Number(r.inspected) || 0,
+        passed: Number(r.passed) || 0,
+        failed: Number(r.failed) || 0,
+        fallbackScore: Number.isFinite(fb) ? fb : 0,
       };
     });
 
     const stageRes = await query(`
       SELECT 
-        COALESCE(NULLIF(TRIM(stage), ''), 'P01') as stage_name,
+        TRIM(stage) as stage_name,
         COUNT(*)::int as count,
-        COALESCE(SUM(inspected_qty), 0)::int as inspected,
-        COALESCE(SUM(passed_qty), 0)::int as passed
+        COALESCE(SUM(COALESCE(inspected_qty, 0)), 0)::float8 as inspected,
+        COALESCE(SUM(COALESCE(passed_qty, 0)), 0)::float8 as passed,
+        COALESCE(SUM(COALESCE(failed_qty, 0)), 0)::float8 as failed
       FROM ${SCHEMA}.inspections
       ${whereSql}
-      GROUP BY COALESCE(NULLIF(TRIM(stage), ''), 'P01')
+        AND stage IS NOT NULL
+        AND TRIM(stage) <> ''
+      GROUP BY TRIM(stage)
       ORDER BY count DESC
       LIMIT 20
     `, params).catch(() => ({ rows: [] }));
 
     const stageData = stageRes.rows.map((r: any) => ({
-      stageName: r.stage_name || 'P01',
+      stageName: r.stage_name || '',
       count: parseInt(r.count || '0', 10) || 0,
-      inspected: parseInt(r.inspected || '0', 10) || 0,
-      passed: parseInt(r.passed || '0', 10) || 0
+      inspected: Number(r.inspected) || 0,
+      passed: Number(r.passed) || 0,
+      failed: Number(r.failed) || 0,
     }));
 
     return {
@@ -4350,7 +4546,10 @@ export async function getDashboardStats(filters: any = {}) {
         drafts,
         highPriority,
         nonDraftCount,
-        avgSuccessRate: parseFloat(avgSuccessRate.toFixed(1)),
+        totalInspected,
+        totalPassed,
+        totalFailed,
+        avgSuccessRate,
         avgErrorRate
       },
       monthlyData,
@@ -4360,7 +4559,7 @@ export async function getDashboardStats(filters: any = {}) {
   } catch (err: any) {
     console.error('Error getting dashboard stats:', err);
     return {
-      stats: { total: 0, drafts: 0, highPriority: 0, nonDraftCount: 0, avgSuccessRate: 98.5, avgErrorRate: 1.5 },
+      stats: { total: 0, drafts: 0, highPriority: 0, nonDraftCount: 0, totalInspected: 0, totalPassed: 0, totalFailed: 0, avgSuccessRate: 0, avgErrorRate: 0 },
       monthlyData: [],
       workshopData: [],
       stageData: []
@@ -4371,27 +4570,85 @@ export async function getDashboardStats(filters: any = {}) {
 export async function syncSuppliersFromBookings(): Promise<{ success: boolean; updatedCount: number }> {
   try {
     const bookingsRes = await query(`
-      SELECT supplier_name, location_address, contact_person, contact_phone
+      SELECT supplier_name, location_address, contact_person, contact_phone, updated_at, created_at
       FROM ${SCHEMA}.subcontractor_bookings
       WHERE deleted_at IS NULL AND supplier_name IS NOT NULL AND TRIM(supplier_name) != ''
+      ORDER BY COALESCE(updated_at, created_at, 0) DESC, id DESC
     `);
-    
-    let updatedCount = 0;
-    for (const row of bookingsRes.rows) {
-      const name = (row.supplier_name || row.supplierName || '').trim();
-      const address = (row.location_address || row.locationAddress || '').trim();
-      const contact_person = (row.contact_person || row.contactPerson || '').trim();
-      const phone = (row.contact_phone || row.contactPhone || row.phone || '').trim();
 
-      if (name && (address || contact_person || phone)) {
-        await upsertSupplier({
-          name,
-          address: address || undefined,
-          contact_person: contact_person || undefined,
-          phone: phone || undefined
-        });
+    // Group bookings by normalized supplier name (newest -> oldest), filling missing fields from older entries
+    const grouped = new Map<string, {
+      name: string;
+      address: string;
+      contact_person: string;
+      phone: string;
+      latestTs: number;
+    }>();
+
+    for (const row of bookingsRes.rows) {
+      const name = normalizeSupplierName(row.supplier_name || row.supplierName);
+      const key = name.toLowerCase();
+      if (!key) continue;
+
+      const address = String(row.location_address || row.locationAddress || '').trim();
+      const contact_person = String(row.contact_person || row.contactPerson || '').trim();
+      const phone = String(row.contact_phone || row.contactPhone || row.phone || '').trim();
+      const ts = Number(row.updated_at || row.created_at || 0);
+
+      const existing = grouped.get(key);
+      if (!existing) {
+        grouped.set(key, { name, address, contact_person, phone, latestTs: ts });
+      } else {
+        if (!existing.address && address) existing.address = address;
+        if (!existing.contact_person && contact_person) existing.contact_person = contact_person;
+        if (!existing.phone && phone) existing.phone = phone;
+        if (ts > existing.latestTs) existing.latestTs = ts;
+      }
+    }
+
+    let updatedCount = 0;
+    for (const [, agg] of grouped) {
+      if (!agg.address && !agg.contact_person && !agg.phone) continue;
+
+      const beforeRes = await query(
+        `SELECT id, version FROM ${SCHEMA}.suppliers WHERE deleted_at IS NULL AND ${SUPPLIER_NORM_NAME_SQL} = $1 LIMIT 1`,
+        [agg.name.toLowerCase()]
+      );
+      const prevRow = beforeRes.rows[0] || null;
+
+      const saved = await upsertSupplier(
+        {
+          name: agg.name,
+          address: agg.address || undefined,
+          contact_person: agg.contact_person || undefined,
+          phone: agg.phone || undefined,
+        },
+        'SYSTEM',
+        {
+          preferExistingIfNewer: true,
+          sourceUpdatedAt: agg.latestTs,
+        }
+      );
+
+      if (!prevRow || Number(saved.version || 1) !== Number(prevRow.version || 1)) {
         updatedCount++;
       }
+
+      // Align any bookings matching this supplier name whose supplier_id is missing or pointing to a deleted supplier
+      await query(
+        `UPDATE ${SCHEMA}.subcontractor_bookings sb
+         SET supplier_id = $1
+         WHERE sb.deleted_at IS NULL
+           AND LOWER(TRIM(REGEXP_REPLACE(COALESCE(sb.supplier_name, ''), '[[:space:]]+', ' ', 'g'))) = $2
+           AND (
+             sb.supplier_id IS NULL
+             OR NOT EXISTS (
+               SELECT 1 FROM ${SCHEMA}.suppliers s
+               WHERE s.id = sb.supplier_id AND s.deleted_at IS NULL
+             )
+           )`,
+        [saved.id, agg.name.toLowerCase()]
+      );
     }
     return { success: true, updatedCount };
   } catch (err: any) {
@@ -4488,32 +4745,79 @@ function mapNcrRow(row: any): NCR {
 }
 
 export async function getNcrs(filters: any = {}, page: number = 1, limit: number = 50): Promise<{ items: NCR[]; total: number }> {
-  let where = `WHERE n.deleted_at IS NULL`;
+  let where = `WHERE n.deleted_at IS NULL AND (i.id IS NULL OR i.deleted_at IS NULL)`;
   const args: any[] = [];
 
-  if (filters.status && filters.status !== 'ALL') {
-    args.push(filters.status);
-    where += ` AND n.status = $${args.length}`;
+  const statuses = splitCsvParam(filters.status).map((s) => s.toUpperCase());
+  if (statuses.length > 0) {
+    args.push(statuses);
+    where += ` AND UPPER(TRIM(COALESCE(n.status, ''))) = ANY($${args.length})`;
   }
 
-  if (filters.severity && filters.severity !== 'ALL') {
-    args.push(filters.severity);
-    where += ` AND n.severity = $${args.length}`;
+  const inspectionStatuses = splitCsvParam(filters.inspectionStatus).map((s) => s.toLowerCase());
+  if (inspectionStatuses.length > 0) {
+    args.push(inspectionStatuses);
+    where += ` AND LOWER(TRIM(COALESCE(i.status, ''))) = ANY($${args.length})`;
   }
 
-  if (filters.project && filters.project !== 'ALL') {
-    args.push(`%${filters.project}%`);
-    where += ` AND (i.ma_ct ILIKE $${args.length} OR i.ten_ct ILIKE $${args.length} OR n.data ILIKE $${args.length} OR n.description ILIKE $${args.length})`;
+  const severities = splitCsvParam(filters.severity).map((s) => s.toUpperCase());
+  if (severities.length > 0) {
+    args.push(severities);
+    where += ` AND UPPER(TRIM(COALESCE(n.severity, ''))) = ANY($${args.length})`;
   }
 
-  if (filters.workshop && filters.workshop !== 'ALL') {
-    args.push(filters.workshop);
-    where += ` AND (i.workshop = $${args.length} OR n.data ILIKE '%' || $${args.length} || '%')`;
+  const types = splitCsvParam(filters.type).map((t) => t.toUpperCase());
+  if (types.length > 0) {
+    const expandedTypes = new Set<string>(types);
+    if (expandedTypes.has('SQC_MAT')) expandedTypes.add('SQC_VT');
+    if (expandedTypes.has('SQC_VT')) expandedTypes.add('SQC_MAT');
+    args.push(Array.from(expandedTypes));
+    where += ` AND UPPER(TRIM(COALESCE(i.type, ''))) = ANY($${args.length})`;
   }
 
-  if (filters.qc && filters.qc !== 'ALL') {
-    args.push(filters.qc);
-    where += ` AND (n.created_by = $${args.length} OR i.created_by = $${args.length})`;
+  const stages = splitCsvParam(filters.stage).map((s) => s.toLowerCase());
+  if (stages.length > 0) {
+    args.push(stages);
+    where += ` AND LOWER(TRIM(COALESCE(i.stage, ''))) = ANY($${args.length})`;
+  }
+
+  const projects = splitCsvParam(filters.project);
+  if (projects.length > 0) {
+    const hasUnassigned = projects.includes('__UNASSIGNED__');
+    const namedUpper = projects.filter((p) => p !== '__UNASSIGNED__').map((p) => p.toUpperCase());
+    const namedPatterns = projects.filter((p) => p !== '__UNASSIGNED__').map((p) => `%${p}%`);
+    if (hasUnassigned && namedUpper.length > 0) {
+      args.push(namedUpper);
+      const exactIdx = args.length;
+      args.push(namedPatterns);
+      const patIdx = args.length;
+      where += ` AND ((COALESCE(TRIM(i.ma_ct), '') = '') OR UPPER(TRIM(COALESCE(i.ma_ct, ''))) = ANY($${exactIdx}) OR COALESCE(i.ten_ct, '') ILIKE ANY($${patIdx}) OR COALESCE(n.data, '') ILIKE ANY($${patIdx}) OR COALESCE(n.description, '') ILIKE ANY($${patIdx}))`;
+    } else if (hasUnassigned) {
+      where += ` AND COALESCE(TRIM(i.ma_ct), '') = ''`;
+    } else {
+      args.push(namedUpper);
+      const exactIdx = args.length;
+      args.push(namedPatterns);
+      const patIdx = args.length;
+      where += ` AND (UPPER(TRIM(COALESCE(i.ma_ct, ''))) = ANY($${exactIdx}) OR COALESCE(i.ma_ct, '') ILIKE ANY($${patIdx}) OR COALESCE(i.ten_ct, '') ILIKE ANY($${patIdx}) OR COALESCE(n.data, '') ILIKE ANY($${patIdx}) OR COALESCE(n.description, '') ILIKE ANY($${patIdx}))`;
+    }
+  }
+
+  const workshops = splitCsvParam(filters.workshop);
+  if (workshops.length > 0) {
+    const wsLower = workshops.map((w) => w.toLowerCase());
+    const wsPatterns = workshops.map((w) => `%${w}%`);
+    args.push(wsLower);
+    const exactIdx = args.length;
+    args.push(wsPatterns);
+    const patIdx = args.length;
+    where += ` AND (LOWER(TRIM(COALESCE(i.workshop, ''))) = ANY($${exactIdx}) OR COALESCE(n.data, '') ILIKE ANY($${patIdx}))`;
+  }
+
+  const qcs = splitCsvParam(filters.qc).map((q) => q.toLowerCase());
+  if (qcs.length > 0) {
+    args.push(qcs);
+    where += ` AND (LOWER(TRIM(COALESCE(n.created_by, ''))) = ANY($${args.length}) OR LOWER(TRIM(COALESCE(i.created_by, ''))) = ANY($${args.length}))`;
   }
 
   if (filters.search) {
@@ -4530,20 +4834,17 @@ export async function getNcrs(filters: any = {}, page: number = 1, limit: number
     )`;
   }
 
-  if (filters.unixStart) {
-    const ts = parseInt(filters.unixStart, 10);
-    if (!isNaN(ts)) {
-      args.push(ts);
-      where += ` AND n.created_at >= $${args.length}`;
-    }
+  const ncrTsExpr = `CASE WHEN n.created_at > 1000000000000 THEN (n.created_at / 1000) ELSE n.created_at END`;
+  const startTs = parseBoundTimestamp(filters.unixStart ?? filters.startDate, false);
+  if (startTs !== null) {
+    args.push(startTs);
+    where += ` AND ${ncrTsExpr} >= $${args.length}`;
   }
 
-  if (filters.unixEnd) {
-    const ts = parseInt(filters.unixEnd, 10);
-    if (!isNaN(ts)) {
-      args.push(ts);
-      where += ` AND n.created_at <= $${args.length}`;
-    }
+  const endTs = parseBoundTimestamp(filters.unixEnd ?? filters.endDate, true);
+  if (endTs !== null) {
+    args.push(endTs);
+    where += ` AND ${ncrTsExpr} <= $${args.length}`;
   }
 
   const fromJoin = `FROM ${SCHEMA}.ncrs n LEFT JOIN ${SCHEMA}.inspections i ON n.inspection_id = i.id`;
@@ -5891,48 +6192,84 @@ export async function saveToolCalibration(
 
 // --- SUPPLIER STATS & DETAILS API ---
 export async function getSupplierStats(name: string) {
-  if (!name) return { totalReports: 0, passedReports: 0, failedReports: 0, passRate: 100 };
+  const cleanKey = normalizeSupplierKey(name);
+  if (!cleanKey) {
+    return {
+      totalReports: 0,
+      passedReports: 0,
+      failedReports: 0,
+      passRate: 0,
+      defectRate: 0,
+      pass_rate: 0,
+      defect_rate: 0,
+      total_pos: 0,
+    };
+  }
   const res = await query(`
     SELECT 
       COUNT(*)::int as total,
       COUNT(*) FILTER (WHERE UPPER(COALESCE(status,'')) IN ('APPROVED','COMPLETED','VERIFIED','PASSED','PASS','LOCKED'))::int as passed,
       COUNT(*) FILTER (WHERE UPPER(COALESCE(status,'')) IN ('REJECTED','FLAGGED','FAILED','REJECT'))::int as failed
     FROM ${SCHEMA}.inspections
-    WHERE (UPPER(COALESCE(ma_nha_may,'')) = UPPER($1) OR UPPER(COALESCE(workshop,'')) = UPPER($1))
+    WHERE (
+      LOWER(TRIM(REGEXP_REPLACE(COALESCE(ma_nha_may, ''), '[[:space:]]+', ' ', 'g'))) = $1
+      OR LOWER(TRIM(REGEXP_REPLACE(COALESCE(workshop, ''), '[[:space:]]+', ' ', 'g'))) = $1
+    )
+      AND deleted_at IS NULL
       AND COALESCE(UPPER(status), '') <> 'DELETED'
-  `, [name]);
+  `, [cleanKey]);
   
   const row = res.rows[0] || { total: 0, passed: 0, failed: 0 };
   const total = row.total || 0;
   const passed = row.passed || 0;
   const failed = row.failed || 0;
-  const passRate = total > 0 ? Math.round((passed / total) * 100) : 100;
-  return { totalReports: total, passedReports: passed, failedReports: failed, passRate };
+  const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const defectRate = total > 0 ? Math.round((failed / total) * 100) : 0;
+  return {
+    totalReports: total,
+    passedReports: passed,
+    failedReports: failed,
+    passRate,
+    defectRate,
+    pass_rate: passRate,
+    defect_rate: defectRate,
+    total_pos: total,
+  };
 }
 
 export async function getSupplierInspections(name: string) {
-  if (!name) return [];
+  const cleanKey = normalizeSupplierKey(name);
+  if (!cleanKey) return [];
   const res = await query(`
     SELECT id, type, po_number, ma_ct, ten_ct, ten_hang_muc, ma_nha_may as supplier, workshop, status, date, score, created_at
     FROM ${SCHEMA}.inspections
-    WHERE (UPPER(COALESCE(ma_nha_may,'')) = UPPER($1) OR UPPER(COALESCE(workshop,'')) = UPPER($1))
+    WHERE (
+      LOWER(TRIM(REGEXP_REPLACE(COALESCE(ma_nha_may, ''), '[[:space:]]+', ' ', 'g'))) = $1
+      OR LOWER(TRIM(REGEXP_REPLACE(COALESCE(workshop, ''), '[[:space:]]+', ' ', 'g'))) = $1
+    )
+      AND deleted_at IS NULL
       AND COALESCE(UPPER(status), '') <> 'DELETED'
     ORDER BY created_at DESC NULLS LAST
     LIMIT 100
-  `, [name]);
+  `, [cleanKey]);
   return res.rows;
 }
 
 export async function getSupplierMaterials(name: string) {
-  if (!name) return [];
+  const cleanKey = normalizeSupplierKey(name);
+  if (!cleanKey) return [];
   const res = await query(`
     SELECT DISTINCT ten_hang_muc, po_number, ma_ct, ten_ct
     FROM ${SCHEMA}.inspections
-    WHERE (UPPER(COALESCE(ma_nha_may,'')) = UPPER($1) OR UPPER(COALESCE(workshop,'')) = UPPER($1))
+    WHERE (
+      LOWER(TRIM(REGEXP_REPLACE(COALESCE(ma_nha_may, ''), '[[:space:]]+', ' ', 'g'))) = $1
+      OR LOWER(TRIM(REGEXP_REPLACE(COALESCE(workshop, ''), '[[:space:]]+', ' ', 'g'))) = $1
+    )
       AND ten_hang_muc IS NOT NULL
+      AND deleted_at IS NULL
       AND COALESCE(UPPER(status), '') <> 'DELETED'
     LIMIT 100
-  `, [name]);
+  `, [cleanKey]);
   return res.rows;
 }
 

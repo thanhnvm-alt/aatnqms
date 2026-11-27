@@ -36,28 +36,51 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
         fetchSupplierInspections(supplier.name),
         fetchSupplierMaterials(supplier.name)
       ]);
-      setStats(sData);
-      setInspections(iData);
-      setMaterials(mData);
-    } catch (e) { console.error(e); } finally { setIsLoading(false); }
+      const normalizedInspections = Array.isArray(iData) ? iData : (Array.isArray(iData?.items) ? iData.items : []);
+      const normalizedMaterials = Array.isArray(mData) ? mData : (Array.isArray(mData?.items) ? mData.items : []);
+      setStats(sData || {});
+      setInspections(normalizedInspections);
+      setMaterials(normalizedMaterials);
+    } catch (e) {
+      console.error(e);
+      setInspections([]);
+      setMaterials([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
+  const safeInspections = useMemo(
+    () => (Array.isArray(inspections) ? inspections : []),
+    [inspections]
+  );
+
+  const safeMaterials = useMemo(
+    () => (Array.isArray(materials) ? materials : []),
+    [materials]
+  );
+
   const uniqueMaterials = useMemo(() => {
-      const fromInspections = inspections.flatMap(i => i.materials || []).map(m => m.name);
-      const fromTable = materials.map(m => m.shortText || m.material);
-      return Array.from(new Set([...fromInspections, ...fromTable])).filter(Boolean).sort();
-  }, [inspections, materials]);
+      const fromInspections = safeInspections
+        .flatMap(i => (Array.isArray(i?.materials) ? i.materials : []))
+        .map(m => m?.name)
+        .filter(Boolean);
+      const fromTable = safeMaterials
+        .map((m: any) => m?.shortText || m?.material || m?.ten_hang_muc)
+        .filter(Boolean);
+      return Array.from(new Set([...fromInspections, ...fromTable])).sort();
+  }, [safeInspections, safeMaterials]);
 
   const historyData = useMemo(() => {
-      return inspections.slice(0, 7).reverse().map(i => {
-          const parsedScore = Number(i.score);
-          const formattedDate = String(i.date || '').split('-').slice(1).join('/');
+      return safeInspections.slice(0, 7).reverse().map(i => {
+          const parsedScore = Number(i?.score);
+          const formattedDate = String(i?.date || '').split('-').slice(1).join('/');
           return {
               date: formattedDate || '—',
               score: Number.isFinite(parsedScore) ? parsedScore : 0
           };
       });
-  }, [inspections]);
+  }, [safeInspections]);
 
   return (
     <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-800/50 overflow-hidden relative" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
@@ -104,16 +127,16 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
                 <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2"><TrendingUp className="w-5 h-5 text-green-500 dark:text-green-400" /> Chỉ số IQC/SQC</h3>
                 <div className="space-y-6">
                   <div className="flex justify-between items-center">
-                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">Chấp nhận (Pass)</p><p className="text-3xl font-black text-green-600 dark:text-green-500">{Math.round(stats?.pass_rate || 0)}%</p></div>
+                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">Chấp nhận (Pass)</p><p className="text-3xl font-black text-green-600 dark:text-green-500">{Math.round(stats?.pass_rate ?? stats?.passRate ?? 0)}%</p></div>
                     <div className="w-12 h-12 rounded-full bg-green-50 dark:bg-green-900/20 flex items-center justify-center text-green-600 dark:text-green-500 border border-green-100"><CheckCircle2 className="w-6 h-6" /></div>
                   </div>
                   <div className="flex justify-between items-center">
-                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">Sai lỗi (Defect)</p><p className="text-3xl font-black text-red-600 dark:text-red-400">{Math.round(stats?.defect_rate || 0)}%</p></div>
+                    <div className="space-y-1"><p className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">Sai lỗi (Defect)</p><p className="text-3xl font-black text-red-600 dark:text-red-400">{Math.round(stats?.defect_rate ?? stats?.defectRate ?? 0)}%</p></div>
                     <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-900/20 flex items-center justify-center text-red-600 dark:text-red-400 border border-red-100"><AlertTriangle className="w-6 h-6" /></div>
                   </div>
                   <div className="pt-4 border-t border-slate-50 flex justify-between items-center">
                     <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Tổng đơn hàng (POs)</p>
-                    <span className="text-xl font-black text-slate-800 dark:text-slate-200">{stats?.total_pos || 0}</span>
+                    <span className="text-xl font-black text-slate-800 dark:text-slate-200">{stats?.total_pos ?? stats?.totalReports ?? 0}</span>
                   </div>
                 </div>
               </div>
@@ -151,22 +174,22 @@ export const SupplierDetail: React.FC<SupplierDetailProps> = ({ supplier, user, 
               <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
                 <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
                   <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest flex items-center gap-2"><ListChecks className="w-5 h-5 text-indigo-500" /> Nhật ký kiểm tra (PO History)</h3>
-                  <span className="text-[10px] font-black bg-blue-600 text-white px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">{inspections.length} Phiếu</span>
+                  <span className="text-[10px] font-black bg-blue-600 text-white px-3 py-1 rounded-full uppercase tracking-widest shadow-lg">{safeInspections.length} Phiếu</span>
                 </div>
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {inspections.map(i => (
+                  {safeInspections.map(i => (
                     <div key={i.id} onClick={() => onViewInspection(i.id)} className="min-h-[56px] p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer group transition-all">
                       <div className="flex items-center gap-4">
                         <div className={`p-2 rounded-xl ${i.status === InspectionStatus.APPROVED ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-500' : 'bg-orange-100 text-orange-600'}`}><FileText className="w-5 h-5" /></div>
                         <div>
-                          <p className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight mb-0.5">{i.ten_hang_muc}</p>
-                          <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{i.date} • {i.type} • Score: {i.score}%</p>
+                          <p className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight mb-0.5">{i.ten_hang_muc || i.po_number || i.id}</p>
+                          <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{i.date || '—'} • {i.type} • Score: {i.score ?? 0}%</p>
                         </div>
                       </div>
                       <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 dark:text-blue-400 transition-all" />
                     </div>
                   ))}
-                  {inspections.length === 0 && <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-widest text-[10px]">Không có dữ liệu lịch sử</div>}
+                  {safeInspections.length === 0 && <div className="py-20 text-center text-slate-300 font-bold uppercase tracking-widest text-[10px]">Không có dữ liệu lịch sử</div>}
                 </div>
               </div>
             </div>

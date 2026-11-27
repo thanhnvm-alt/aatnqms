@@ -512,8 +512,17 @@ export const permanentDeleteInspection = async (id: string): Promise<{ success: 
 };
 
 export const fetchDashboardStats = async (filters: any = {}): Promise<any> => {
-  const params = new URLSearchParams(filters);
-  return apiFetch(`/api/dashboard/stats?${params.toString()}`);
+  const params = new URLSearchParams();
+  Object.entries(filters || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) {
+      const str = String(v).trim();
+      if (str !== '' && str !== 'ALL') {
+        params.set(k, str);
+      }
+    }
+  });
+  const qs = params.toString();
+  return apiFetch(`/api/dashboard/stats${qs ? `?${qs}` : ''}`);
 };
 
 // --- IPO API ---
@@ -963,7 +972,17 @@ export const updateProject = async (project: Partial<Project>): Promise<Project>
 
 // --- NCRs API ---
 export const fetchNcrs = async (filters: any = {}, page: number = 1, limit: number = 50): Promise<{ items: any[], total: number }> => {
-  const params = new URLSearchParams({ ...filters, page: page.toString(), limit: limit.toString() });
+  const params = new URLSearchParams();
+  Object.entries(filters || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) {
+      const str = String(v).trim();
+      if (str !== '' && str !== 'ALL') {
+        params.set(k, str);
+      }
+    }
+  });
+  params.set('page', page.toString());
+  params.set('limit', limit.toString());
   return apiFetch(`/api/ncrs?${params.toString()}`);
 };
 

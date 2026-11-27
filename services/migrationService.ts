@@ -601,6 +601,7 @@ export async function runMigrations() {
       migrationLogs.push(`⚠️ Could not create suppliers: ${e.message}`);
     }
     await addColumn('suppliers', 'deleted_at', 'BIGINT');
+    await addColumn('suppliers', 'version', 'INTEGER DEFAULT 1');
 
     try {
       await query(`
@@ -1073,6 +1074,16 @@ export async function runMigrations() {
 
     // --- PHASE 3: DEDICATED TRACEABILITY INDEX TABLE (Mã NM / PO / PR) ---
     try {
+      const traceColsRes = await query(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'inspection_traceability_index'`,
+        [schema]
+      );
+      const existingTraceCols = new Set(traceColsRes.rows.map((r: any) => String(r.column_name)));
+      if (existingTraceCols.size > 0 && (!existingTraceCols.has('code_type') || !existingTraceCols.has('code_norm'))) {
+        await query(`DROP TABLE IF EXISTS "${schema}"."inspection_traceability_index";`);
+        migrationLogs.push(`♻️ Replaced legacy inspection_traceability_index schema in ${schema}`);
+      }
+
       await query(`
         CREATE TABLE IF NOT EXISTS "${schema}"."inspection_traceability_index" (
           "id" TEXT PRIMARY KEY,
@@ -1105,6 +1116,16 @@ export async function runMigrations() {
           "deleted_at" BIGINT
         );
       `);
+      await addColumn('inspection_traceability_index', 'code_type', 'TEXT');
+      await addColumn('inspection_traceability_index', 'code_value', 'TEXT');
+      await addColumn('inspection_traceability_index', 'code_norm', 'TEXT');
+      await addColumn('inspection_traceability_index', 'inspection_type', 'TEXT');
+      await addColumn('inspection_traceability_index', 'ma_nha_may', 'TEXT');
+      await addColumn('inspection_traceability_index', 'headcode', 'TEXT');
+      await addColumn('inspection_traceability_index', 'po_number', 'TEXT');
+      await addColumn('inspection_traceability_index', 'pr_number', 'TEXT');
+      await addColumn('inspection_traceability_index', 'inspector_name', 'TEXT');
+      await addColumn('inspection_traceability_index', 'summary', 'TEXT');
       await query(`CREATE INDEX IF NOT EXISTS "idx_trace_idx_code_norm" ON "${schema}"."inspection_traceability_index" ("code_norm", "deleted_at");`);
       await query(`CREATE INDEX IF NOT EXISTS "idx_trace_idx_insp_id" ON "${schema}"."inspection_traceability_index" ("inspection_id", "deleted_at");`);
       await query(`CREATE INDEX IF NOT EXISTS "idx_trace_idx_type_norm" ON "${schema}"."inspection_traceability_index" ("code_type", "code_norm");`);
@@ -1300,6 +1321,195 @@ export async function runMigrations() {
     } catch (l1NormErr: any) {
       console.warn(`⚠️ Could not normalize L1-only APPROVED -> VERIFIED:`, l1NormErr?.message);
       migrationLogs.push(`⚠️ L1-only APPROVED -> VERIFIED warning: ${l1NormErr?.message}`);
+    }
+
+    // M04: Idempotent deduplication of active suppliers + Partial Unique Index
+    try {
+      const pool = await getPool();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`LOCK TABLE "${schema}"."suppliers" IN SHARE ROW EXCLUSIVE MODE`);
+
+        const normExpr = `LOWER(TRIM(REGEXP_REPLACE(COALESCE("name", ''), '[[:space:]]+', ' ', 'g')))`;
+        const dupGroupsRes = await client.query(`
+          SELECT ${normExpr} AS norm_name
+          FROM "${schema}"."suppliers"
+          WHERE "deleted_at" IS NULL
+            AND TRIM(COALESCE("name", '')) <> ''
+          GROUP BY ${normExpr}
+          HAVING COUNT(*) > 1
+          ORDER BY norm_name ASC
+        `);
+
+        let mergedGroupCount = 0;
+        let softDeletedCount = 0;
+        const nowEpoch = Math.floor(Date.now() / 1000);
+
+        for (const grp of dupGroupsRes.rows) {
+          const normName = String(grp.norm_name || '');
+          if (!normName) continue;
+
+          const membersRes = await client.query(
+            `SELECT id, code, name, address, contact_person, phone, email, category, status, data, updated_at, version
+             FROM "${schema}"."suppliers"
+             WHERE "deleted_at" IS NULL
+               AND ${normExpr} = $1
+             ORDER BY COALESCE("updated_at", 0) DESC, "id" DESC`,
+            [normName]
+          );
+
+          if (membersRes.rows.length <= 1) continue;
+
+          const rows = membersRes.rows;
+          const winner = rows[0];
+          const losers = rows.slice(1);
+          const loserIds = losers.map((r: any) => String(r.id));
+
+          const pickFirstNonEmpty = (field: string, fallback = ''): string => {
+            for (const r of rows) {
+              const val = String(r[field] ?? '').trim();
+              if (val !== '') return val;
+            }
+            return fallback;
+          };
+
+          const cleanWinnerName = String(winner.name || '').trim().replace(/\s+/g, ' ');
+          const mergedAddress = pickFirstNonEmpty('address', '');
+          const mergedContact = pickFirstNonEmpty('contact_person', '');
+          const mergedPhone = pickFirstNonEmpty('phone', '');
+          const mergedEmail = pickFirstNonEmpty('email', '');
+          const mergedCategory = pickFirstNonEmpty('category', 'Gia công ngoài');
+          const mergedStatus = pickFirstNonEmpty('status', 'ACTIVE');
+          const mergedData = pickFirstNonEmpty('data', '');
+          const winnerCode = String(winner.code ?? '').trim();
+          const mergedCode = winnerCode || pickFirstNonEmpty('code', '');
+          const winnerUpdatedAt = Number(winner.updated_at || 0) || nowEpoch;
+
+          // Relink subcontractor_bookings pointing to any redundant supplier IDs
+          await client.query(
+            `UPDATE "${schema}"."subcontractor_bookings"
+             SET "supplier_id" = $1
+             WHERE "supplier_id" = ANY($2::text[])`,
+            [winner.id, loserIds]
+          );
+
+          // Soft-delete redundant duplicate rows before updating winner (prevents code conflicts)
+          await client.query(
+            `UPDATE "${schema}"."suppliers"
+             SET "deleted_at" = $1,
+                 "updated_at" = $1
+             WHERE "id" = ANY($2::text[])
+               AND "deleted_at" IS NULL`,
+            [nowEpoch, loserIds]
+          );
+
+          const hasWinnerChanges =
+            cleanWinnerName !== String(winner.name ?? '') ||
+            mergedAddress !== String(winner.address ?? '') ||
+            mergedContact !== String(winner.contact_person ?? '') ||
+            mergedPhone !== String(winner.phone ?? '') ||
+            mergedEmail !== String(winner.email ?? '') ||
+            mergedCategory !== String(winner.category ?? '') ||
+            mergedStatus !== String(winner.status ?? '') ||
+            (mergedCode !== '' && mergedCode !== winnerCode) ||
+            (mergedData !== '' && mergedData !== String(winner.data ?? ''));
+
+          if (hasWinnerChanges) {
+            await client.query(
+              `UPDATE "${schema}"."suppliers"
+               SET "name" = $1,
+                   "code" = CASE WHEN TRIM(COALESCE("code", '')) = '' AND $2 <> '' THEN $2 ELSE "code" END,
+                   "address" = $3,
+                   "contact_person" = $4,
+                   "phone" = $5,
+                   "email" = $6,
+                   "category" = $7,
+                   "status" = $8,
+                   "data" = CASE WHEN $9 <> '' THEN $9 ELSE "data" END,
+                   "version" = COALESCE("version", 1) + 1,
+                   "updated_at" = GREATEST(COALESCE("updated_at", 0), $10)
+               WHERE "id" = $11`,
+              [
+                cleanWinnerName,
+                mergedCode,
+                mergedAddress,
+                mergedContact,
+                mergedPhone,
+                mergedEmail,
+                mergedCategory,
+                mergedStatus,
+                mergedData,
+                nowEpoch,
+                winner.id,
+              ]
+            );
+          }
+
+          await client.query(
+            `INSERT INTO "${schema}"."audit_logs" (
+               id, user_id, action, entity_type, entity_id, old_value, new_value, timestamp, ip_address, user_agent
+             ) VALUES (
+               gen_random_uuid(), 'SYSTEM', 'MERGE_DUPLICATE_SUPPLIERS', 'supplier', $1, $2::jsonb, $3::jsonb, $4, NULL, 'migrationService:deduplicate_suppliers'
+             )`,
+            [
+              winner.id,
+              JSON.stringify({
+                normName,
+                loserIds,
+                losers: losers.map((l: any) => ({
+                  id: l.id,
+                  code: l.code,
+                  name: l.name,
+                  address: l.address,
+                  contact_person: l.contact_person,
+                  phone: l.phone,
+                  email: l.email,
+                  category: l.category,
+                  status: l.status,
+                  updated_at: l.updated_at,
+                })),
+              }),
+              JSON.stringify({
+                id: winner.id,
+                code: mergedCode,
+                name: cleanWinnerName,
+                address: mergedAddress,
+                contact_person: mergedContact,
+                phone: mergedPhone,
+                email: mergedEmail,
+                category: mergedCategory,
+                status: mergedStatus,
+                updated_at: winnerUpdatedAt,
+              }),
+              nowEpoch,
+            ]
+          );
+
+          mergedGroupCount++;
+          softDeletedCount += loserIds.length;
+        }
+
+        await client.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS "uq_suppliers_norm_name_active"
+          ON "${schema}"."suppliers" ((${normExpr}))
+          WHERE "deleted_at" IS NULL AND TRIM(COALESCE("name", '')) <> ''
+        `);
+
+        await client.query('COMMIT');
+        if (mergedGroupCount > 0) {
+          migrationLogs.push(`♻️ Merged ${mergedGroupCount} duplicate supplier groups (soft-deleted ${softDeletedCount} redundant rows) in ${schema}`);
+        }
+        migrationLogs.push(`✅ Ensured uq_suppliers_norm_name_active partial unique index on ${schema}.suppliers`);
+      } catch (txErr) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
+      }
+    } catch (supDupErr: any) {
+      console.warn(`⚠️ Could not deduplicate suppliers / ensure unique index:`, supDupErr?.message);
+      migrationLogs.push(`⚠️ Supplier deduplication warning: ${supDupErr?.message}`);
     }
 
     console.log(`📡 ISO-DB: Migrations completed successfully in schema ${schema}`);
